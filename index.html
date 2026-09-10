@@ -1776,9 +1776,9 @@ function edPruneLinks(){if(isModel())project.manualLinks=edNormalizeLinks(projec
 function edAddManualLink(from,to,route='elbow'){
  const a=edLookup(from),b=edLookup(to);if(!a||!b||from===to)return notify('Clique em dois cartões ou faixas diferentes.');if(a.page!==b.page)return notify('A ligação visual precisa ficar na mesma página.');
  if((project.manualLinks||[]).some(l=>[l.from,l.to].includes(from)&&[l.from,l.to].includes(to)))return notify('Esses elementos já têm uma ligação manual.');
- edCommit(()=>{project.manualLinks=project.manualLinks||[];project.manualLinks.push({id:newId(),from,to,route,color:project.style.line,width:2});});notify('Ligação criada sem alterar a subordinação.');
+ edCommit(()=>{project.manualLinks=project.manualLinks||[];project.manualLinks.push({id:newId(),from,to,route,color:project.style.line,width:2});});intelEnableManual();notify('Ligação criada. Arraste os cartões para ajustar a posição.');
 }
-function edManualPick(ref){if(!ED.linkStart){ED.linkStart=ref;ED.refs=new Set([ref]);renderChart();notify('Agora clique no segundo cartão ou faixa.');return;}if(ED.linkStart===ref)return;const from=ED.linkStart;ED.linkMode=false;ED.linkStart='';ED.refs=new Set([from,ref]);edAddManualLink(from,ref);switchTab('align');}
+function edManualPick(ref){if(!ED.linkStart){ED.linkStart=ref;ED.refs=new Set([ref]);renderChart();notify('Agora clique no segundo cartão ou faixa.');return;}if(ED.linkStart===ref)return;const from=ED.linkStart;ED.linkMode=false;ED.linkStart='';ED.refs=new Set([from,ref]);edAddManualLink(from,ref);intelEnableManual();}
 function edManualLines(page){
  const lines=[];for(const link of project.manualLinks||[]){const a=edLookup(link.from),b=edLookup(link.to);if(!a||!b||a.page!==page||b.page!==page)continue;const u=a.item,v=b.item;let points;
  if(v.y>=u.y+u.h+10||u.y>=v.y+v.h+10){const down=v.y>=u.y+u.h+10,start={x:edCX(u),y:down?u.y+u.h:u.y},end={x:edCX(v),y:down?v.y:v.y+v.h},middle=(start.y+end.y)/2;points=link.route==='straight'?[start,end]:[start,{x:start.x,y:middle},{x:end.x,y:middle},end];}
@@ -1998,7 +1998,7 @@ const intelHelp=document.createElement('button');intelHelp.textContent='Como fun
 </script>
 <script id="org-auto-layout-script">
 /* Posicionamento por níveis da hierarquia, com faixas separadas por departamento. */
-function intelArrange(doc){
+function intelArrangeVertical(doc){
  for(let page=0;page<doc.pages.length;page++){
   const entries=edEntries(page,doc),map=new Map(entries.map(e=>[e.ref,e])),memo=new Map(),active=new Set();
   function depth(ref){if(memo.has(ref))return memo.get(ref);if(active.has(ref))throw Error('Há um ciclo nas ligações.');active.add(ref);const e=map.get(ref),parents=edParents(e).filter(r=>map.has(r));const level=parents.length?1+Math.max(...parents.map(depth)):0;active.delete(ref);memo.set(ref,level);return level;}
@@ -2010,6 +2010,27 @@ function intelArrange(doc){
  }
  return doc;
 }
+// Horizontal: hierarquia da esquerda para a direita. Vertical: de cima para baixo.
+const intelDirection=document.createElement('select');
+intelDirection.id='intelDirection';
+intelDirection.setAttribute('aria-label','Direção da organização inteligente');
+intelDirection.title='Direção da hierarquia ao organizar';
+intelDirection.innerHTML='<option value="vertical">Vertical ↓</option><option value="horizontal">Horizontal →</option>';
+intelDirection.value=project.layoutDirection==='horizontal'?'horizontal':'vertical';
+$('intelButton').insertAdjacentElement('beforebegin',intelDirection);
+function intelArrange(doc,direction=intelDirection.value){
+ const horizontal=direction==='horizontal';
+ // Trabalha em eixos virtuais com as dimensões correspondentes, sem girar os cartões.
+ if(horizontal)for(let page=0;page<doc.pages.length;page++)for(const {item} of edEntries(page,doc)){
+  [item.x,item.y]=[item.y,item.x];[item.w,item.h]=[item.h,item.w];
+ }
+ try{intelArrangeVertical(doc);}finally{
+  if(horizontal)for(let page=0;page<doc.pages.length;page++)for(const {item} of edEntries(page,doc)){
+   [item.x,item.y]=[item.y-90,item.x+90];[item.w,item.h]=[item.h,item.w];
+  }
+ }
+ doc.layoutDirection=horizontal?'horizontal':'vertical';return doc;
+}
 const intelPositionsBase=intelBuild;
 intelBuild=function(source){const result=intelPositionsBase(source);intelArrange(result.doc);return result;};
 const intelLayoutButton=document.createElement('button');intelLayoutButton.textContent='Organizar posições';intelLayoutButton.title='Separar cartões mantendo as ligações atuais';intelLayoutButton.onclick=()=>edSafe(()=>{if(!isModel())return;const doc=intelArrange(clone(project));edCommit(()=>{project=doc;});intelEnableManual();fitView();notify('Posições organizadas. Agora você pode arrastar os cartões livremente.');});$('intelButton').insertAdjacentElement('afterend',intelLayoutButton);
@@ -2019,7 +2040,7 @@ manualMoveButton.onclick=()=>{intelEnableManual();notify('Arraste os cartões ou
 
 const intelRunPositionsBase=intelRun;
 intelRun=function(){const before=project;intelRunPositionsBase();if(isModel()&&project!==before){intelEnableManual();fitView();notify('Organização concluída. Arraste os cartões para ajustar manualmente.');}};$('intelButton').onclick=intelRun;$('intelApply').onclick=intelRun;
-const intelInfo=intelDialog.querySelectorAll('p');if(intelInfo[1])intelInfo[1].textContent='Recria as subordinações, separa os departamentos e organiza os cartões sem sobreposição. Ligações manuais não duplicadas são mantidas. Ao terminar, a movimentação livre é ativada. Arraste os cartões ou use Desfazer.';
+const intelInfo=intelDialog.querySelectorAll('p');if(intelInfo[1])intelInfo[1].textContent='Recria as subordinações, separa os departamentos e organiza os cartões sem sobreposição. Ligações manuais não duplicadas são mantidas. Escolha Vertical (de cima para baixo) ou Horizontal (da esquerda para a direita) antes de organizar. Ao terminar, a movimentação livre é ativada. Arraste os cartões ou use Desfazer.';
 
 </script>
 <script id="sese-cloud-script">
