@@ -1594,7 +1594,7 @@ const edRef=(kind,id)=>(kind==='group'?'g:':'p:')+id;
 const edNow=()=>project.activePage||0;
 function edUpgrade(p){if(p.template!=='sese-r15')return p;const migrated=p.editorVersion===2;p.pages.forEach((pg,i)=>{pg.layoutKind=pg.layoutKind||(!migrated?(i===0?'admin':'operational'):'free');pg.id=i;const people=p.people.filter(n=>n.page===i),top=people.find(n=>n.group==='Gerência'),sup=people.filter(n=>n.group==='Supervisão');pg.groups.forEach((g,j)=>{g.id=g.id||'g'+i+'_'+j;g.color=validColor(g.color)?g.color:p.style.accent;g.route=g.route||(!migrated&&g.label==='Qualidade'?'column':'branch');if(!Array.isArray(g.parents))g.parents=pg.layoutKind==='operational'&&sup.length?sup.map(n=>'p:'+n.id):top?['p:'+top.id]:[];});people.forEach(n=>{const group=pg.groups.find(g=>g.id===n.groupId)||pg.groups.find(g=>g.label===n.group);n.groupId=group?.id||'';if(!Object.hasOwn(n,'link')){const boss=people.find(b=>b.id===n.parent);n.link=group&&(!boss||boss.group!==n.group)?'g:'+group.id:n.parent?'p:'+n.parent:'';if(n.group==='Contato VW'&&top){n.link='p:'+top.id;n.connectorMode='side'}}n.parent=n.link.startsWith('p:')?n.link.slice(2):null;});});p.editorVersion=2;return p;}
 function edValidate(raw){if(raw?.template==='sese-r15'&&raw.editorVersion===2){raw=clone(raw);for(const n of raw.people||[])n.parent=typeof n.link==='string'&&n.link.startsWith('p:')?n.link.slice(2):null;}const p=edBase.validate(raw);if(p.template!=='sese-r15')return p;const idOK=v=>typeof v==='string'&&/^[a-zA-Z0-9_-]{1,80}$/.test(v);p.editorVersion=raw.editorVersion===2?2:undefined;
- p.pages.forEach((pg,i)=>{const src=raw.pages[i];pg.layoutKind=['admin','operational','free'].includes(src.layoutKind)?src.layoutKind:undefined;pg.groups.forEach((g,j)=>{const old=src.groups[j];g.id=idOK(old.id)?old.id:'g'+i+'_'+j;g.color=validColor(old.color)?old.color:p.style.accent;g.route=['column','branch'].includes(old.route)?old.route:undefined;if(Array.isArray(old.parents))g.parents=old.parents.slice(0,300).filter(s=>typeof s==='string'&&/^[pg]:[a-zA-Z0-9_-]{1,80}$/.test(s));})});
+ p.pages.forEach((pg,i)=>{const src=raw.pages[i];pg.layoutKind=['admin','operational','free'].includes(src.layoutKind)?src.layoutKind:undefined;pg.groups.forEach((g,j)=>{const old=src.groups[j];if(['department','shift'].includes(old.kind))g.kind=old.kind;g.id=idOK(old.id)?old.id:'g'+i+'_'+j;g.color=validColor(old.color)?old.color:p.style.accent;g.route=['column','branch'].includes(old.route)?old.route:undefined;if(Array.isArray(old.parents))g.parents=old.parents.slice(0,300).filter(s=>typeof s==='string'&&/^[pg]:[a-zA-Z0-9_-]{1,80}$/.test(s));})});
  p.people.forEach((n,i)=>{const a=raw.people[i];n.groupId=idOK(a.groupId)?a.groupId:'';if(typeof a.link==='string'&&(!a.link||/^[pg]:[a-zA-Z0-9_-]{1,80}$/.test(a.link)))n.link=a.link;n.department=typeof a.department==='string'?a.department.slice(0,100):'';n.extraParents=Array.isArray(a.extraParents)?[...new Set(a.extraParents.filter(v=>typeof v==='string'&&/^[pg]:[a-zA-Z0-9_-]{1,80}$/.test(v)))]:[];if(a.connectorMode==='side')n.connectorMode='side'});edUpgrade(p);edAssertGraph(p);p.manualLinks=edNormalizeLinks(raw.manualLinks,p);return p;
 }
 validateProject=edValidate;
@@ -1682,7 +1682,7 @@ function edPointerMove(e){const d=ED.drag;if(!d||d.pointer!==e.pointerId)return;
  let dx=(e.clientX-d.sx)/d.scale,dy=(e.clientY-d.sy)/d.scale;if(ED.snap){dx=Math.round(dx/10)*10;dy=Math.round(dy/10)*10;}dx=Math.max(dx,-Math.min(...d.positions.map(p=>p.x)));dy=Math.max(dy,-Math.min(...d.positions.map(p=>p.y)));dx=Math.min(dx,12000-Math.max(...d.positions.map(p=>p.x)));dy=Math.min(dy,12000-Math.max(...d.positions.map(p=>p.y)));for(const p of d.positions){const a=edLookup(p.ref);if(a){a.item.x=p.x+dx;a.item.y=p.y+dy}}edSmartDrag(d);renderChart();updateHistory();}
 function edPointerEnd(e){const d=ED.drag;if(!d||d.pointer!==e.pointerId)return;if(e.type==='pointercancel'&&d.started){project=d.snapshot;past=d.oldPast;future=d.oldFuture;renderAll();updateHistory();}else if(d.started){persist();if(activeTab==='people')renderPeople();if(activeTab==='align')edRenderAlignment()}ED.drag=null;if($('viewport').hasPointerCapture?.(e.pointerId))$('viewport').releasePointerCapture(e.pointerId);}
 undo=function(redo=false){edBase.undo(redo);if(isModel()){edUpgrade(project);edCleanSelection();renderAll();if(activeTab==='align')edRenderAlignment()}};
-modelLoad=function(){edBase.load();edUpgrade(project);ED.refs.clear();ED.context={kind:'page',id:edNow()};selected=null;renderAll();};
+modelLoad=function(){edBase.load();edUpgrade(project);if(typeof cardSeparateAreaShift==='function')cardSeparateAreaShift(project);ED.refs.clear();ED.context={kind:'page',id:edNow()};selected=null;renderAll();};
 function edInstall(){if(modelSavedRaw){try{project=edValidate(modelSavedRaw);}catch(e){notify('Não foi possível restaurar os vínculos salvos: '+e.message);}modelSavedRaw=null;}if(isModel()){edUpgrade(project);edAssertGraph(project);}ED.context={kind:'page',id:edNow()};selected=null;
  const alignTab=document.createElement('button');alignTab.id='alignTab';alignTab.setAttribute('role','tab');alignTab.setAttribute('aria-selected','false');alignTab.textContent='Alinhar';alignTab.onclick=()=>switchTab('align');document.querySelector('.tabs').append(alignTab);$('peopleTab').textContent='Editar';$('styleTab').textContent='Aparência';const alignPanel=document.createElement('div');alignPanel.id='alignPanel';alignPanel.hidden=true;$('stylePanel').after(alignPanel);const toolbar=document.createElement('div');toolbar.id='edToolbar';toolbar.className='ed-toolbar';$('modelPages').after(toolbar);
  document.querySelector('.tabs').onkeydown=e=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(e.key)){e.preventDefault();const tabs=['people','style','align'],at=tabs.indexOf(activeTab),target=e.key==='Home'?0:e.key==='End'?2:(at+(e.key==='ArrowLeft'?2:1))%3;switchTab(tabs[target]);$(tabs[target]+'Tab').focus()}};
@@ -1993,7 +1993,7 @@ renderChart();
 <script id="org-intelligence-script">
 /* Regras locais por departamento e nível do cargo; não usa serviço externo de IA. */
 function intelRank(role){const s=edSearchNorm(role);if(/\b(presidente|ceo)\b/.test(s))return 0;if(/\b(diretor|diretora|diretoria)\b/.test(s))return 10;if(/\b(gerente|gerencia)\b/.test(s))return 20;if(/\b(coordenador|coordenadora|coordenacao)\b/.test(s))return 30;if(/\b(supervisor|supervisora|supervisao)\b/.test(s))return 40;if(/\b(lider|encarregado|encarregada)\b/.test(s))return 50;return 100;}
-function intelBuild(source){const doc=clone(source);edUpgrade(doc);let linked=0,unassigned=0,areaFallback=0;const details=[];
+function intelBuild(source){const doc=clone(source);edUpgrade(doc);departmentNormalize(doc);let linked=0,unassigned=0,areaFallback=0;const details=[];
 for(let page=0;page<doc.pages.length;page++){
  const pg=doc.pages[page],people=doc.people.filter(n=>n.page===page),sets=new Map();
  for(const n of people){let g=pg.groups.find(g=>g.id===n.groupId);if(!g&&n.group){const matches=pg.groups.filter(g=>edSearchNorm(g.label).trim()===edSearchNorm(n.group).trim());if(matches.length===1)g=matches[0];}const key=g?'g:'+g.id:edSearchNorm(n.group).trim();if(!key){unassigned++;details.push(n.name+': sem departamento; ligação atual mantida.');continue;}if(!sets.has(key))sets.set(key,{group:g,people:[]});sets.get(key).people.push(n);}
@@ -2213,10 +2213,10 @@ function multiAddParent(ref,parent){const e=edLookup(ref);if(!e||!parent)return;
 const multiCutBase=quickCut;quickCut=function(edge){if(edge.kind==='parent'){const e=edLookup(edge.to);if(e){multiSetParents(edge.to,edParents(e).filter(r=>r!==edge.from));return;}}multiCutBase(edge);};
 function multiBossPanel(){
  if(!isModel()||!['person','group'].includes(ED.context.kind))return;const ref=(ED.context.kind==='person'?'p:':'g:')+ED.context.id,e=edLookup(ref);if(!e)return;
- const panel=$('peoplePanel');if(panel.querySelector('#multiBossBox'))return;const parents=edParents(e),blocked=edBelow(ref),options=edEntries().filter(v=>v.ref!==ref&&!blocked.has(v.ref)&&!parents.includes(v.ref)).sort((a,b)=>(a.kind==='person'?a.item.name:a.item.label).localeCompare(b.kind==='person'?b.item.name:b.item.label,'pt-BR',{sensitivity:'base',numeric:true}));
- const box=document.createElement('section');box.id='multiBossBox';box.innerHTML='<h3 style="font-size:14px">Superiores ('+parents.length+')</h3><div>'+parents.map((r,i)=>({r,i})).sort((a,b)=>quickEdgeName(a.r).localeCompare(quickEdgeName(b.r),'pt-BR',{sensitivity:'base',numeric:true})).map(({r,i})=>'<div class="multi-boss-row"><span>'+esc(quickEdgeName(r))+'</span><button type="button" data-remove-boss="'+i+'" aria-label="Remover superior '+esc(quickEdgeName(r))+'">Remover</button></div>').join('')+'</div><label class="field"><span>Adicionar superior</span><select id="multiBossSelect"><option value="">Escolha uma pessoa ou área</option>'+['Pessoas','Áreas','Turnos'].map(category=>{const items=options.filter(v=>(v.kind==='person'?'Pessoas':/turno/i.test(v.item.label)?'Turnos':'Áreas')===category);return items.length?'<optgroup label="'+category+'">'+items.map(v=>'<option value="'+esc(v.ref)+'">'+esc(v.kind==='person'?v.item.name:v.item.label)+'</option>').join('')+'</optgroup>':'';}).join('')+'</select></label><button type="button" id="multiBossAdd" class="soft wide">+ Adicionar superior</button>';
+ const panel=$('peoplePanel');if(panel.querySelector('#multiBossBox'))return;const allParents=edParents(e),parents=e.kind==='person'?allParents.filter(r=>r.startsWith('p:')):allParents,blocked=edBelow(ref),options=edEntries().filter(v=>(e.kind!=='person'||v.kind==='person')&&v.ref!==ref&&!blocked.has(v.ref)&&!parents.includes(v.ref)).sort((a,b)=>(a.kind==='person'?a.item.name:a.item.label).localeCompare(b.kind==='person'?b.item.name:b.item.label,'pt-BR',{sensitivity:'base',numeric:true}));
+ const box=document.createElement('section');box.id='multiBossBox';box.innerHTML='<h3 style="font-size:14px">Superiores ('+parents.length+')</h3><div>'+parents.map((r,i)=>({r,i})).sort((a,b)=>quickEdgeName(a.r).localeCompare(quickEdgeName(b.r),'pt-BR',{sensitivity:'base',numeric:true})).map(({r,i})=>'<div class="multi-boss-row"><span>'+esc(quickEdgeName(r))+'</span><button type="button" data-remove-boss="'+i+'" aria-label="Remover superior '+esc(quickEdgeName(r))+'">Remover</button></div>').join('')+'</div><label class="field"><span>Adicionar superior</span><select id="multiBossSelect"><option value="">Escolha o superior</option>'+['Pessoas','Áreas','Turnos'].map(category=>{const items=options.filter(v=>(v.kind==='person'?'Pessoas':/turno/i.test(v.item.label)?'Turnos':'Áreas')===category);return items.length?'<optgroup label="'+category+'">'+items.map(v=>'<option value="'+esc(v.ref)+'">'+esc(v.kind==='person'?v.item.name:v.item.label)+'</option>').join('')+'</optgroup>':'';}).join('')+'</select></label><button type="button" id="multiBossAdd" class="soft wide">+ Adicionar superior</button>';
  const field=$(e.kind==='person'?'edPersonParent':'edGroupParent')?.closest('label');if(field){field.before(box);field.hidden=true;}else panel.append(box);const search=$(e.kind==='person'?'edPersonParentSearch':'edGroupParentSearch');if(search)search.closest('.ed-search')?.setAttribute('hidden','');
- $('multiBossAdd').onclick=()=>edSafe(()=>{if(!$('multiBossSelect').value)return notify('Escolha o superior na lista.');multiAddParent(ref,$('multiBossSelect').value);});box.querySelectorAll('[data-remove-boss]').forEach(b=>b.onclick=()=>edSafe(()=>multiSetParents(ref,parents.filter((_,i)=>i!==Number(b.dataset.removeBoss)))));
+ $('multiBossAdd').onclick=()=>edSafe(()=>{if(!$('multiBossSelect').value)return notify('Escolha o superior na lista.');multiAddParent(ref,$('multiBossSelect').value);});box.querySelectorAll('[data-remove-boss]').forEach(b=>b.onclick=()=>edSafe(()=>multiSetParents(ref,allParents.filter(r=>r!==parents[Number(b.dataset.removeBoss)]))));
 }
 const multiPeopleBase=renderPeople;renderPeople=function(){multiPeopleBase();multiBossPanel();};
 </script><script id="top-file-actions-script">
@@ -2229,7 +2229,7 @@ for(const [id,label] of [['printBtn','Impressão'],['exportBtn','Exportar'],['op
 }
 </script><style>.superior-questions{border:1px solid var(--border);border-radius:10px;padding:12px;margin:12px 0;background:#f5f8ff}.superior-questions h3{font-size:14px;margin:0 0 14px}.superior-questions .field{display:block;margin-bottom:16px}.superior-questions .field>span{display:block;font-size:12px;font-weight:600;margin-bottom:8px}.superior-questions select{width:100%;min-width:0}.superior-kind{display:grid;grid-template-columns:1fr 1fr;gap:8px}.superior-kind button{font-size:12px;white-space:normal}.superior-kind button[aria-pressed=true]{background:#204a91;color:white;border-color:#204a91}.org-dark .superior-questions{background:#1b2c45}</style><script id="inline-area-script">function inlineAreaInstall(){const select=$('edPersonGroup');if(!select||$('inlineNewArea'))return;const owner=ED.context.id;const box=document.createElement('div');box.id='inlineNewArea';box.style.cssText='margin:8px 0 16px';box.innerHTML='<button type="button" id="inlineAreaOpen" class="soft wide">+ Nova área</button><div id="inlineAreaForm" hidden><label class="field"><span>Nome da nova área</span><input id="inlineAreaName" maxlength="60" placeholder="Ex.: Planejamento"></label><div class="two-cols"><button type="button" id="inlineAreaCancel">Cancelar</button><button type="button" id="inlineAreaSave">Criar área</button></div></div>';select.closest('label').after(box);
  $('inlineAreaOpen').onclick=()=>{$('inlineAreaForm').hidden=false;$('inlineAreaOpen').hidden=true;$('inlineAreaName').focus();};$('inlineAreaCancel').onclick=()=>{$('inlineAreaForm').hidden=true;$('inlineAreaOpen').hidden=false;};
- $('inlineAreaSave').onclick=()=>edSafe(()=>{const name=$('inlineAreaName').value.trim();if(!name)return notify('Informe o nome da área.');if(modelPage().groups.some(g=>edSearchNorm(g.label)===edSearchNorm(name)))return notify('Já existe uma área com esse nome.');if(modelPage().groups.length>=30)return notify('A página aceita até 30 áreas.');edCommit(()=>{const id=newId(),y=Math.max(230,...edEntries().map(e=>e.item.y+e.item.h+60));modelPage().groups.push({id,label:name,x:100,y,w:230,h:34,color:project.style.accent,parents:[],route:'branch'});});cardEditOpen(owner);notify('Área criada. Ela já está disponível na lista para selecionar.');});
+ $('inlineAreaSave').onclick=()=>edSafe(()=>departmentCreateForPerson(owner,$('inlineAreaName').value));
  $('inlineAreaName').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$('inlineAreaSave').click();}};
 }
 const inlineAreaPeopleBase=renderPeople;renderPeople=function(){inlineAreaPeopleBase();if(ED.context.kind==='person')inlineAreaInstall();};
@@ -2237,14 +2237,94 @@ const inlineAreaPeopleBase=renderPeople;renderPeople=function(){inlineAreaPeople
 $('orgCanvasTools').after($('modelPages'));
 modelPageControls();
 requestAnimationFrame(()=>fullOriginalFit());
+</script><script id="department-data-script">
+/* O departamento usa o cadastro de áreas; o turno continua independente. */
+function departmentKey(value){return edSearchNorm(value).trim().replace(/\s+/g,' ');}
+function departmentIsShift(group){return group.kind==='shift'||(group.kind!=='department'&&!!cardShiftFromLabel(group.label));}
+function departmentGroups(page=edNow(),doc=project){return doc.pages[page].groups.filter(g=>!departmentIsShift(g)).slice().sort((a,b)=>a.label.localeCompare(b.label,'pt-BR',{sensitivity:'base',numeric:true}));}
+function departmentNewGroup(doc,page,label){
+ const pg=doc.pages[page],key=departmentKey(label),found=pg.groups.find(g=>!departmentIsShift(g)&&departmentKey(g.label)===key);
+ if(found)return found;
+ if(pg.groups.length>=30)throw Error('A página '+pg.label+' aceita até 30 faixas. Remova uma faixa vazia antes de criar outro departamento.');
+ let hash=2166136261;for(const c of page+'|'+key)hash=Math.imul(hash^c.charCodeAt(0),16777619);
+ const base='dept_'+page+'_'+(hash>>>0).toString(36);let id=base,index=1;
+ while(doc.pages.some(p=>p.groups.some(g=>g.id===id)))id=base+'_'+index++;
+ const members=doc.people.filter(n=>n.page===page&&departmentKey(n.group||n.department||n.area)===key).sort((a,b)=>a.y-b.y);
+ const anchor=members[0],entries=edEntries(page,doc).map(e=>e.item);
+ const g={id,label:cleanText(label,60).trim(),kind:'department',x:anchor?Math.max(28,anchor.x-290):100,y:anchor?Math.max(150,anchor.y-70):230,w:230,h:34,color:doc.style.accent,parents:[],route:'branch'};
+ while(entries.some(n=>g.x<n.x+n.w+18&&g.x+g.w+18>n.x&&g.y<n.y+n.h+18&&g.y+g.h+18>n.y))g.y+=60;
+ if(g.y>11900)throw Error('Não há espaço para outro departamento nesta página.');
+ pg.groups.push(g);return g;
+}
+function departmentStatus(n,doc=project){
+ const g=doc.pages[n.page]?.groups.find(g=>g.id===n.groupId&&!departmentIsShift(g));if(!g)return 'none';
+ if(edBelow('g:'+g.id,doc).has('p:'+n.id))return 'connected';
+ if(edBelow('p:'+n.id,doc).has('g:'+g.id))return 'superior';
+ return 'disconnected';
+}
+function departmentConnectPerson(doc,n){
+ const g=doc.pages[n.page]?.groups.find(g=>g.id===n.groupId&&!departmentIsShift(g));
+ if(!g||departmentStatus(n,doc)!=='disconnected')return false;
+ const parents=edParents({kind:'person',item:n});parents.push('g:'+g.id);
+ n.link=parents[0]||'';n.extraParents=[...new Set(parents.slice(1))];n.parent=n.link.startsWith('p:')?n.link.slice(2):null;
+ return true;
+}
+function departmentNormalize(doc,raw=doc){
+ if(doc.template!=='sese-r15')return doc;
+ const migrate=raw.departmentVersion!==1,oldPeople=new Map((raw.people||[]).map(n=>[n.id,n]));
+ for(let page=0;page<doc.pages.length;page++){
+  const pg=doc.pages[page];pg.groups.forEach(g=>g.kind=departmentIsShift(g)?'shift':'department');
+  for(const n of doc.people.filter(n=>n.page===page)){
+   const old=oldPeople.get(n.id)||n;
+   let g=pg.groups.find(g=>g.id===n.groupId&&!departmentIsShift(g));
+   let name=n.group||(migrate?(old.area||old.department||''):'');
+   if(!g&&name&&!cardShiftFromLabel(name))g=departmentNewGroup(doc,page,name);
+   // Recupera o ADM apagado pela antiga regra que o confundia com turno.
+   if(!g&&migrate&&!name){const linked=edParents({kind:'person',item:n}).map(r=>edLookup(r,doc)).find(e=>e?.kind==='group'&&!departmentIsShift(e.item)&&departmentKey(e.item.label)==='adm');if(linked)g=linked.item;}
+   n.groupId=g?.id||'';n.group=g?.label||'';n.department=n.group;
+  }
+ }
+ if(migrate)for(const n of doc.people)departmentConnectPerson(doc,n);
+ doc.departmentVersion=1;edAssertGraph(doc);return doc;
+}
+function departmentAssign(doc,id,areaId){
+ const n=doc.people.find(p=>p.id===id);if(!n)return;
+ const g=doc.pages[n.page].groups.find(g=>g.id===areaId&&!departmentIsShift(g));
+ if(areaId&&!g)throw Error('Escolha um departamento desta página.');
+ const oldRef=n.groupId?'g:'+n.groupId:'';
+ if(n.groupId!==areaId){const parents=edParents({kind:'person',item:n}).filter(r=>r!==oldRef);n.link=parents[0]||'';n.extraParents=parents.slice(1);n.parent=n.link.startsWith('p:')?n.link.slice(2):null;}
+ n.groupId=g?.id||'';n.group=g?.label||'';n.department=n.group;
+ if(g)departmentConnectPerson(doc,n);
+ edAssertGraph(doc);
+}
+function departmentSetArea(id,areaId){
+ const draft=clone(project);departmentAssign(draft,id,areaId);edCommit(()=>project=draft);
+ const n=project.people.find(p=>p.id===id);notify(!areaId?'Departamento removido do cartão.':departmentStatus(n)==='superior'?'Departamento vinculado. Esta pessoa já é superior dele.':'Departamento vinculado e conexão atualizada.');
+}
+function departmentSync(){
+ if(!isModel())return;
+ edSafe(()=>{const draft=clone(project),before=draft.pages.reduce((sum,p)=>sum+p.groups.length,0);
+  departmentNormalize(draft);let links=0;for(const n of draft.people)if(departmentConnectPerson(draft,n))links++;
+  edAssertGraph(draft);const created=draft.pages.reduce((sum,p)=>sum+p.groups.length,0)-before;
+  edCommit(()=>project=draft);if($('quickAreasDialog')?.open)quickAreasList();
+  notify(created+' departamento(s) criado(s); '+links+' conexão(ões) adicionada(s).');
+ });
+}
+function departmentCreateForPerson(id,name){
+ name=cleanText(name,60).trim();if(!name)throw Error('Informe o nome do departamento.');
+ const draft=clone(project),n=draft.people.find(p=>p.id===id);if(!n)return;
+ const g=departmentNewGroup(draft,n.page,name);departmentAssign(draft,id,g.id);edCommit(()=>project=draft);cardEditOpen(id);
+ notify('Departamento criado ou localizado, selecionado e conectado.');
+}
+
 </script><script id="independent-shift-script">const CARD_SHIFTS=['1º','2º','3º','ADM'];
 function cardShiftOptions(doc=project){return [...new Set([...CARD_SHIFTS,...(doc.customShifts||[])])];}
-function cardShiftFromLabel(label){const s=String(label||'').trim().toUpperCase();if(/^(ADM|ADMINISTRATIVO)(\s+TURNO)?$/.test(s))return 'ADM';const m=s.match(/^(?:TURNO\s*)?0?([123])\s*[º°O]?\s*(?:TURNO)?$/);return m?m[1]+'º':'';}
-function cardSeparateAreaShift(doc,raw=doc){if(doc.template!=='sese-r15')return doc;doc.customShifts=Array.isArray(raw.customShifts)?[...new Set(raw.customShifts.filter(s=>typeof s==='string'&&s.trim()&&s.length<=40).map(s=>s.trim()))].slice(0,100):[];for(const n of doc.people){const old=raw.people?.find(p=>p.id===n.id)||n;const g=doc.pages[n.page]?.groups.find(g=>g.id===n.groupId);const inferred=cardShiftFromLabel(g?.label||n.group);n.shift=Object.hasOwn(old,'shift')?(cardShiftOptions(doc).includes(old.shift)?old.shift:''):inferred;if(inferred){n.groupId='';n.group='';}}return doc;}
+function cardShiftFromLabel(label){const s=String(label||'').trim().toUpperCase();if(/^(?:TURNO\s+(?:ADM|ADMINISTRATIVO)|(?:ADM|ADMINISTRATIVO)\s+TURNO)$/.test(s))return 'ADM';const m=s.match(/^(?:TURNO\s*)?0?([123])\s*[º°O]?\s*(?:TURNO)?$/);return m?m[1]+'º':'';}
+function cardSeparateAreaShift(doc,raw=doc){if(doc.template!=='sese-r15')return doc;doc.customShifts=Array.isArray(raw.customShifts)?[...new Set(raw.customShifts.filter(s=>typeof s==='string'&&s.trim()&&s.length<=40).map(s=>s.trim()))].slice(0,100):[];for(const n of doc.people){const old=raw.people?.find(p=>p.id===n.id)||n;const g=doc.pages[n.page]?.groups.find(g=>g.id===n.groupId);const inferred=g?.kind==='department'?'':cardShiftFromLabel(g?.label||n.group);n.shift=Object.hasOwn(old,'shift')?(cardShiftOptions(doc).includes(old.shift)?old.shift:''):inferred;if(inferred){n.groupId='';n.group='';}}return departmentNormalize(doc,raw);}
 const shiftValidateBase=validateProject;validateProject=function(raw){return cardSeparateAreaShift(shiftValidateBase(raw),raw);};
-function cardSetArea(id,areaId){const n=project.people.find(p=>p.id===id);if(!n)return;const area=project.pages[n.page].groups.find(g=>g.id===areaId);if(areaId&&(!area||cardShiftFromLabel(area.label)))throw Error('Escolha uma área válida.');edCommit(()=>{n.groupId=area?.id||'';n.group=area?.label||'';});}
+function cardSetArea(id,areaId){const n=project.people.find(p=>p.id===id);if(!n)return;const area=project.pages[n.page].groups.find(g=>g.id===areaId);if(areaId&&(!area||departmentIsShift(area)))throw Error('Escolha uma área válida.');edCommit(()=>{n.groupId=area?.id||'';n.group=area?.label||'';});}
 function cardSetShift(id,shift){if(shift&&!cardShiftOptions().includes(shift))throw Error('Turno inválido.');const n=project.people.find(p=>p.id===id);if(n)change(()=>n.shift=shift,'shift'+id);}
-function cardShiftFields(){const area=$('edPersonGroup');if(!area||ED.context.kind!=='person')return;const n=project.people.find(p=>p.id===ED.context.id);if(!n)return;const label=area.closest('label');label.querySelector('span').textContent='Área';area.innerHTML='<option value="">Sem área</option>'+modelPage().groups.filter(g=>!cardShiftFromLabel(g.label)).map(g=>'<option value="'+esc(g.id)+'" '+(g.id===n.groupId?'selected':'')+'>'+esc(g.label)+'</option>').join('');area.onchange=e=>edSafe(()=>cardSetArea(n.id,e.target.value));
+function cardShiftFields(){const area=$('edPersonGroup');if(!area||ED.context.kind!=='person')return;const n=project.people.find(p=>p.id===ED.context.id);if(!n)return;const label=area.closest('label');label.querySelector('span').textContent='Área';area.innerHTML='<option value="">Sem área</option>'+departmentGroups().map(g=>'<option value="'+esc(g.id)+'" '+(g.id===n.groupId?'selected':'')+'>'+esc(g.label)+'</option>').join('');area.onchange=e=>edSafe(()=>cardSetArea(n.id,e.target.value));
  if($('edPersonShift'))return;const field=document.createElement('label');field.className='field';field.innerHTML='<span>Turno</span><select id="edPersonShift"><option value="">Não informado</option>'+cardShiftOptions().map(s=>'<option value="'+s+'" '+(n.shift===s?'selected':'')+'>'+s+'</option>').join('')+'</select>';const anchor=$('inlineNewArea')||label;anchor.after(field);$('edPersonShift').onchange=e=>edSafe(()=>cardSetShift(n.id,e.target.value));}
 const shiftPeopleBase=renderPeople;renderPeople=function(){shiftPeopleBase();cardShiftFields();};
 cardSeparateAreaShift(project);renderPeople();
@@ -2265,5 +2345,54 @@ const addShiftPeopleBase=renderPeople;renderPeople=function(){addShiftPeopleBase
  panel.append(container,extra);
 }
 const sequencePeopleBase=renderPeople;renderPeople=function(){sequencePeopleBase();personSequence();};
+</script><style>.department-connection{margin:0 0 14px;padding:12px;border:1px solid var(--border);border-radius:9px;background:var(--tint)}.department-connection>strong{font-size:14px}.department-connection button{margin-top:8px;font-size:13px}#quickAreaList h4{font-size:14px;margin:14px 0 8px}</style><script id="department-controls-script">
+function departmentPersonFields(){
+ if(!isModel()||ED.context.kind!=='person')return;
+ const n=project.people.find(p=>p.id===ED.context.id),select=$('edPersonGroup');if(!n||!select)return;
+ select.closest('label').querySelector('span').textContent='Departamento (área)';
+ select.innerHTML='<option value="">Sem departamento</option>'+departmentGroups(n.page).map(g=>'<option value="'+esc(g.id)+'"'+(g.id===n.groupId?' selected':'')+'>'+esc(g.label)+'</option>').join('');
+ select.onchange=e=>edSafe(()=>departmentSetArea(n.id,e.target.value));
+ if($('inlineAreaOpen'))$('inlineAreaOpen').textContent='+ Novo departamento';
+ if($('inlineAreaName')){$('inlineAreaName').closest('label').querySelector('span').textContent='Nome do departamento';$('inlineAreaSave').textContent='Criar e conectar';$('inlineAreaSave').onclick=()=>edSafe(()=>departmentCreateForPerson(n.id,$('inlineAreaName').value));}
+ const status=departmentStatus(n),box=document.createElement('div');box.className='department-connection';box.id='departmentConnection';
+ const g=project.pages[n.page].groups.find(g=>g.id===n.groupId);
+ const text=status==='connected'?'Conectado a '+g.label+'.':status==='superior'?'Esta pessoa é superior de '+g.label+'.':status==='disconnected'?'Departamento cadastrado. A conexão está desligada.':'Selecione o departamento para criar a conexão.';
+ box.innerHTML='<strong>Conexão do departamento</strong><p class="help">'+esc(text)+'</p>'+(g?'<button type="button" id="departmentLocate" class="wide">Localizar departamento</button>':'')+(status==='disconnected'?'<button type="button" id="departmentReconnect" class="soft wide">Conectar ao departamento</button>':'');
+ select.closest('label').after(box);
+ if($('departmentLocate'))$('departmentLocate').onclick=()=>{edPick('g:'+g.id);fitView();};
+ if($('departmentReconnect'))$('departmentReconnect').onclick=()=>edSafe(()=>departmentSetArea(n.id,n.groupId));
+}
+const departmentPeopleBase=renderPeople;
+renderPeople=function(){departmentPeopleBase();departmentPersonFields();};
+cardSetArea=departmentSetArea;
+
+quickAreasList=function(){
+ const q=departmentKey($('quickAreaSearch').value),box=$('quickAreaList');box.replaceChildren();
+ project.pages.forEach((pg,page)=>{
+  const groups=pg.groups.filter(g=>departmentKey(pg.label+' '+g.label).includes(q)).sort((a,b)=>a.label.localeCompare(b.label,'pt-BR',{sensitivity:'base',numeric:true}));
+  if(!groups.length)return;const heading=document.createElement('h3');heading.textContent=pg.label;box.append(heading);
+  for(const [kind,label] of [['department','Departamentos'],['shift','Faixas de turno']]){
+   const items=groups.filter(g=>(departmentIsShift(g)?'shift':'department')===kind);if(!items.length)continue;
+   const section=document.createElement('h4');section.textContent=label;box.append(section);
+   for(const g of items){const row=document.createElement('button');row.className='quick-area-row';
+    const people=project.people.filter(n=>n.page===page&&(kind==='department'?n.groupId===g.id:n.shift===cardShiftFromLabel(g.label)));
+    row.textContent=g.label+' · '+people.length+' pessoa(s) · Editar conexões';
+    row.onclick=()=>{areasDialog.close();modelSwitchPage(page);edPick('g:'+g.id);fitView();};box.append(row);
+   }
+  }
+ });if(!box.children.length)box.textContent='Nenhum departamento ou turno encontrado.';
+};
+areasDialog.querySelector('h2').textContent='Departamentos e turnos';
+areasDialog.querySelector('p').textContent='Os departamentos usam os mesmos dados de Área. Clique em uma faixa para editar seus superiores e conexões.';
+$('quickAreaName').closest('label').querySelector('span').textContent='Novo departamento na página atual';
+$('quickAreaName').placeholder='Ex.: Planejamento';$('quickAreaCreate').textContent='+ Criar departamento';
+$('quickAreaCreate').onclick=()=>edSafe(()=>{const name=$('quickAreaName').value.trim();if(!name)return notify('Digite o nome do departamento.');const draft=clone(project),g=departmentNewGroup(draft,edNow(),name);edAssertGraph(draft);edCommit(()=>project=draft);areasDialog.close();$('quickAreaName').value='';edPick('g:'+g.id);fitView();});
+const departmentSyncButton=document.createElement('button');departmentSyncButton.id='departmentSync';departmentSyncButton.className='soft wide';departmentSyncButton.textContent='Criar / conectar pelos dados de Área';departmentSyncButton.onclick=departmentSync;$('quickAreaList').before(departmentSyncButton);
+$('quickAreasBtn').textContent='Departamentos';$('orgCanvasTools').prepend($('quickAreasBtn'));
+const departmentToolbarBase=edToolbar;edToolbar=function(){departmentToolbarBase();if($('edAreaBtn'))$('edAreaBtn').textContent='Departamentos';};
+// Mantém o nome legado sincronizado após renomear, mover ou excluir faixas.
+const departmentUpgradeBase=edUpgrade;edUpgrade=function(doc){departmentUpgradeBase(doc);if(doc.template==='sese-r15'&&doc.departmentVersion===1)for(const n of doc.people)n.department=n.group||'';return doc;};
+renderAll();
+
 </script></body>
 </html>
