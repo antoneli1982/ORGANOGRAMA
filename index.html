@@ -1501,7 +1501,7 @@ function modelNodes(page=project.activePage||0){return project.people.filter(n=>
 function modelFooterY(page=project.activePage||0){return Math.max(890,...modelNodes(page).map(n=>n.y+n.h+28))}
 function modelDims(page=project.activePage||0){const width=Math.max(1920,...modelNodes(page).map(n=>n.x+n.w+42),...project.pages[page].groups.map(g=>g.x+g.w+42));return {width,height:Math.max(1080,footerLayout(page,width,modelFooterY(page)).bottom+10)}}
 function modelCardText(n){const s=project.style,font=FONTS[s.font].css,photo=s.showPhotos?Math.min(n.h,90):0,tx=n.x+photo+10,tw=n.w-photo-22;let sizeN=s.nameSize,sizeR=s.roleSize,result;
- for(let f=1;f>=.59;f-=.025){const ns=sizeN*f,rs=sizeR*f,names=wrapText(n.name||'Sem nome',tw,ns,700,font),roles=wrapText(n.role,tw,rs,400,font),details=n.detail?wrapText(n.detail,tw,rs*.94,400,font):[],phones=n.phone?[n.phone]:[],refs=n.substitute?wrapText(n.substitute,tw,rs*.82,500,font):[];const height=names.length*ns*1.12+roles.length*rs*1.1+details.length*rs*1.05+phones.length*rs*1.12+(refs.length?8+refs.length*rs*.9:0);result={tx,tw,ns,rs,names,roles,details,phones,refs,height};if(height<=n.h-13)break;}return result;}
+ for(let f=1;f>=.59;f-=.025){const ns=sizeN*f,rs=sizeR*f,names=wrapText(n.name||'Sem nome',tw,ns,700,font),roles=wrapText(n.role,tw,rs,400,font),details=n.detail?wrapText(n.detail,tw,rs*.94,400,font):[],phones=n.phone?[n.phone]:[],refs=n.substitute?wrapText(n.substitute,tw,rs*.82,500,font):[],bosses=typeof scBossLabel==='function'&&scBossLabel(n)?wrapText(scBossLabel(n),tw,rs*.82,500,font):[];const height=names.length*ns*1.12+roles.length*rs*1.1+details.length*rs*1.05+phones.length*rs*1.12+(refs.length?8+refs.length*rs*.9:0)+bosses.length*rs*.92;result={tx,tw,ns,rs,names,roles,details,phones,refs,bosses,height};if(height<=n.h-13)break;}return result;}
 function modelScene(page=project.activePage||0,opts={title:true,logo:true}){
  const pg=project.pages[page],nodes=modelNodes(page),s=project.style,font=FONTS[s.font].css,dims=modelDims(page),scene=[];
  const add=o=>scene.push(o),text=(t,x,y,w,size,color='#243f84',bold=false,key='')=>add({type:'text',text:t,x,y,w,size,color,bold,font,key});
@@ -1528,7 +1528,7 @@ function modelScene(page=project.activePage||0,opts={title:true,logo:true}){
  for(const g of groups){rect(g.x,g.y,g.w,g.h,(g.color||s.accent),0);add({type:'ellipse',x:g.x-11,y:g.y,w:34,h:34,color:(g.color||s.accent)});add({type:'ellipse',x:g.x-7,y:g.y+4,w:26,h:26,color:'#ffffff'});text('●',g.x-4,g.y+5,20,17,(g.color||s.accent));text(g.label,g.x+27,g.y+9,g.w-32,13,'#ffffff',true,'group:'+g.label)}
  for(const n of nodes){const photo=s.showPhotos?Math.min(n.h,90):0,t=modelCardText(n);rect(n.x,n.y,n.w,n.h,n.color,Math.min(n.h/2,s.radius*2),n.id);if(s.showPhotos){if(n.photo)add({type:'image',src:n.photo,x:n.x,y:n.y,w:photo,h:n.h,ellipse:true,key:n.id});else{add({type:'ellipse',x:n.x,y:n.y,w:photo,h:n.h,color:'#edf2fa',key:n.id});text(n.group==='Contato VW'?'VW':initials(n.name),n.x+3,n.y+n.h/2-14,photo-6,23,n.color,true,n.id)}}
   let y=n.y+(n.h-t.height)/2;const emit=(lines,size,color,weight,gap,key)=>{for(const label of lines){text(label,t.tx,y,t.tw,size,color,weight,key);y+=size*gap}};
-  emit(t.names,t.ns,s.text,true,1.12,'org-name-'+n.id);emit(t.roles,t.rs,s.text,false,1.1,'org-role-'+n.id);emit(t.details,t.rs*.94,s.text,false,1.12,'org-detail-'+n.id);emit(t.phones,t.rs,s.text,false,1.12,'org-phone-'+n.id);if(t.refs.length){y+=8;emit(t.refs,t.rs*.82,s.text,false,1.1,'org-substitute-'+n.id)}
+  emit(t.names,t.ns,s.text,true,1.12,'org-name-'+n.id);emit(t.roles,t.rs,s.text,false,1.1,'org-role-'+n.id);emit(t.details,t.rs*.94,s.text,false,1.12,'org-detail-'+n.id);emit(t.phones,t.rs,s.text,false,1.12,'org-phone-'+n.id);emit(t.bosses||[],t.rs*.82,s.text,false,1.12,'org-superior-'+n.id);if(t.refs.length){y+=8;emit(t.refs,t.rs*.82,s.text,false,1.1,'org-substitute-'+n.id)}
  }
  scene.push(...footerLayout(page,dims.width,modelFooterY(page)).scene);return {scene,...dims};
 }
@@ -1804,7 +1804,7 @@ const PRINT_PAPERS={A0:[841,1189],A1:[594,841],A2:[420,594],A3:[297,420],A4:[210
 const PRINT_DEFAULT={paper:'A3',orientation:'landscape',margin:5,allPages:true,title:true,logo:true,keepData:true,smart:true};
 let printSettings={...PRINT_DEFAULT};
 try{printSettings=printNormalize(JSON.parse(localStorage.getItem('organograma-print-v1')||'null')||{})}catch(e){}
-function printNormalize(raw={}){const v={...PRINT_DEFAULT,...raw};return {layoutVersion:2,smart:v.smart!==false,paper:PRINT_PAPERS[v.paper]?v.paper:'A3',orientation:v.orientation==='portrait'?'portrait':'landscape',margin:Number.isFinite(Number(v.margin))?Math.max(0,Math.min(50,raw.layoutVersion!==2&&Number(v.margin)===10?5:Number(v.margin))):5,allPages:v.allPages!==false,title:v.title!==false,logo:v.logo!==false,keepData:v.keepData!==false}}
+function printNormalize(raw={}){const v={...PRINT_DEFAULT,...raw};return {layoutVersion:2,smart:v.smart!==false,paper:PRINT_PAPERS[v.paper]?v.paper:'A3',orientation:v.smart!==false?'landscape':v.orientation==='portrait'?'portrait':'landscape',margin:Number.isFinite(Number(v.margin))?Math.max(0,Math.min(50,raw.layoutVersion!==2&&Number(v.margin)===10?5:Number(v.margin))):5,allPages:v.allPages!==false,title:v.title!==false,logo:v.logo!==false,keepData:v.keepData!==false}}
 function printPaper(o=printSettings){const v=printNormalize(o),[short,long]=PRINT_PAPERS[v.paper];return {...v,width:v.orientation==='landscape'?long:short,height:v.orientation==='landscape'?short:long}}
 
 function printBounds(data){
@@ -1857,8 +1857,8 @@ function smartPrintLayout(doc,index,groups,columns,innerColumns){
   for(const block of row){for(const p of block.positions)positions.push({...p,x:p.x+x,y:p.y+y});x+=block.width+gap;}y+=Math.max(...row.map(b=>b.height))+gap;
  }
  const copy=clone(doc),byRef=new Map(edEntries(index,copy).map(e=>[e.ref,e.item]));for(const p of positions){const n=byRef.get(p.ref);n.x=p.x;n.y=p.y;}
- // Os pontos de conexão personalizados se aplicam ao desenho manual; o impresso usa novas rotas.
- copy.connectionSettings={};return copy;
+ // Mantém os lados e os desvios escolhidos também no arranjo de impressão.
+ return copy;
 }
 function smartPrintBands(doc,index,o,orientation){
  const paper=printPaper({...o,orientation}),width=paper.width-2*paper.margin,height=paper.height-2*paper.margin,font=FONTS[doc.style.font].css,header=[];
@@ -1878,7 +1878,7 @@ function smartPrintBuild(index,options){
   const arranged=smartPrintLayout(doc,index,groups,columns,inner),body=smartPrintBody(arranged,index);candidates.push({body,reflow:true,columns,inner,layoutDoc:arranged});
  }
  let best=null;
- for(const orientation of ['portrait','landscape']){
+ for(const orientation of ['landscape']){
   const bands=smartPrintBands(doc,index,o,orientation);
   for(const c of candidates){const scale=Math.min(bands.width/c.body.width,bands.chartHeight/c.body.height),occupancy=(c.body.width*scale/bands.width)*(c.body.height*scale/bands.chartHeight),score=scale*(.92+.08*occupancy);
    if(!best||score>best.score+1e-9)best={...c,bands,scale,occupancy,score};
@@ -1900,15 +1900,15 @@ function smartPrintBuild(index,options){
 }
 
 function printScene(index,o){if(o.smart)return smartPrintBuild(index,o);const data=modelScene(index,o);if(!o.smart)return data;const b=printBounds(data);return {width:b.width,height:b.height,scene:data.scene.map(a=>a.type==='line'?{...a,x1:a.x1-b.x,x2:a.x2-b.x,y1:a.y1-b.y,y2:a.y2-b.y}:{...a,x:a.x-b.x,y:a.y-b.y})}}
-function printOrientation(w,h,o){const v=printNormalize(o);if(!v.smart)return v.orientation;const [short,long]=PRINT_PAPERS[v.paper],portrait=Math.min((short-2*v.margin)/w,(long-2*v.margin)/h),landscape=Math.min((long-2*v.margin)/w,(short-2*v.margin)/h);return Math.abs(portrait-landscape)<1e-9?v.orientation:portrait>landscape?'portrait':'landscape'}
-function printQuality(index,o,f){let message=o.smart?'Ocupação máxima da folha':'Ajuste manual';if(isModel()){const data=o.smart?smartPrintBuild(index,o):modelScene(index,o);const sizes=data.scene.filter(a=>a.type==='text'&&String(a.key||'').startsWith('org-name-')).map(a=>a.size*f.scale*72/25.4);if(o.smart&&data.printMeta)message+=' · Área do organograma: '+data.printMeta.graphOccupancy+'%';if(sizes.length){const points=Math.min(...sizes);message+=' · Menor nome: '+points.toLocaleString('pt-BR',{maximumFractionDigits:1})+' pt';if(points<8)message+=' · Um papel maior amplia os nomes'}}return message}
+function printOrientation(w,h,o){const v=printNormalize(o);return v.smart?'landscape':v.orientation;}
+function printQuality(index,o,f){let message=o.smart?'Paisagem · Ocupação máxima da folha':'Ajuste manual';if(isModel()){const data=o.smart?smartPrintBuild(index,o):modelScene(index,o);const sizes=data.scene.filter(a=>a.type==='text'&&String(a.key||'').startsWith('org-name-')).map(a=>a.size*f.scale*72/25.4);if(o.smart&&data.printMeta)message+=' · Área do organograma: '+data.printMeta.graphOccupancy+'%';if(sizes.length){const points=Math.min(...sizes);message+=' · Menor nome: '+points.toLocaleString('pt-BR',{maximumFractionDigits:1})+' pt';if(points<8)message+=' · Um papel maior amplia os nomes'}}return message}
 
 function printFit(w,h,o=printSettings){const v=printNormalize(o),p=printPaper({...v,orientation:printOrientation(w,h,v)}),scale=Math.min((p.width-2*p.margin)/w,(p.height-2*p.margin)/h);return {...p,dpi:v.smart?600:300,scale,x:(p.width-w*scale)/2,y:(p.height-h*scale)/2,w:w*scale,h:h*scale}}
 function printPages(o){return isModel()?modelExportPages(o):[0]}
 function printSource(index,o){if(o.smart&&isModel())return modelSvg(index,false,{...o,transparent:false,sceneData:smartPrintBuild(index,o)});const source=isModel()?modelSvg(index,false,{...o,transparent:false}):exportSVG({...o,transparent:false});if(!o.smart||!isModel())return source;const b=printBounds(modelScene(index,o));let svg=source.svg.replace(/^<svg\b[^>]*>/,'<svg xmlns="http://www.w3.org/2000/svg" width="'+b.width+'" height="'+b.height+'" viewBox="'+b.x+' '+b.y+' '+b.width+' '+b.height+'">');svg=svg.replace(/<rect width="100%" height="100%" fill="[^"]*"\/>/,'<rect x="'+b.x+'" y="'+b.y+'" width="'+b.width+'" height="'+b.height+'" fill="'+project.style.background+'"/>');return {svg,width:b.width,height:b.height}}
 function printSave(){try{localStorage.setItem('organograma-print-v1',JSON.stringify(printSettings))}catch(e){}}
-function printRead(prefix='print'){const v=printNormalize({...printSettings,paper:$(prefix+'Paper').value,orientation:$(prefix+'Orientation').value,margin:$(prefix+'Margin').value,smart:$(prefix+'Smart').checked});if(prefix==='print')for(const [k,suffix] of [['allPages','AllPages'],['title','Title'],['logo','Logo'],['keepData','KeepData']])v[k]=$(prefix+suffix).checked;printSettings=v;$(prefix+'Margin').value=v.margin;printSave();return v}
-function printControls(prefix){return '<label class="check-row smart-print-control"><input type="checkbox" id="'+prefix+'Smart" checked><strong>Impressão inteligente</strong></label><p class="help">Aproveita a largura e a altura da folha: escolhe a orientação, distribui os departamentos e amplia os cartões. Mantém fotos, textos e conexões proporcionais. A reorganização vale apenas para a impressão e o PDF.</p><div class="two-cols"><label class="field"><span>Tamanho do papel</span><select id="'+prefix+'Paper">'+Object.entries(PRINT_PAPERS).map(([k,a])=>'<option value="'+k+'">'+k+' · '+a.join(' × ')+' mm</option>').join('')+'</select></label><label class="field"><span>Orientação</span><select id="'+prefix+'Orientation"><option value="landscape">Paisagem</option><option value="portrait">Retrato</option></select></label></div><label class="field print-margin"><span>Margens (mm)</span><input type="number" min="0" max="50" step="1" id="'+prefix+'Margin"><small>Use 5 mm para maior aproveitamento. Reduza mais somente se sua impressora aceitar. As margens valem nos quatro lados.</small></label>'}
+function printRead(prefix='print'){const v=printNormalize({...printSettings,paper:$(prefix+'Paper').value,orientation:$(prefix+'Orientation').value,margin:$(prefix+'Margin').value,smart:$(prefix+'Smart').checked});if(prefix==='print')for(const [k,suffix] of [['allPages','AllPages'],['title','Title'],['logo','Logo'],['keepData','KeepData']])v[k]=$(prefix+suffix).checked;printSettings=v;$(prefix+'Margin').value=v.margin;$(prefix+'Orientation').value=v.orientation;printSave();return v}
+function printControls(prefix){return '<label class="check-row smart-print-control"><input type="checkbox" id="'+prefix+'Smart" checked><strong>Impressão inteligente</strong></label><p class="help">Usa sempre a folha em paisagem, distribui os departamentos e amplia os cartões para aproveitar ao máximo a largura e a altura disponíveis. Mantém fotos, textos e conexões proporcionais. A reorganização vale apenas para a impressão e o PDF.</p><div class="two-cols"><label class="field"><span>Tamanho do papel</span><select id="'+prefix+'Paper">'+Object.entries(PRINT_PAPERS).map(([k,a])=>'<option value="'+k+'">'+k+' · '+a.join(' × ')+' mm</option>').join('')+'</select></label><label class="field"><span>Orientação</span><select id="'+prefix+'Orientation"><option value="landscape">Paisagem</option><option value="portrait">Retrato</option></select></label></div><label class="field print-margin"><span>Margens (mm)</span><input type="number" min="0" max="50" step="1" id="'+prefix+'Margin"><small>Use 5 mm para maior aproveitamento. Reduza mais somente se sua impressora aceitar. As margens valem nos quatro lados.</small></label>'}
 function printFill(prefix){$(prefix+'Paper').value=printSettings.paper;$(prefix+'Orientation').value=printSettings.orientation;$(prefix+'Margin').value=printSettings.margin;$(prefix+'Smart').checked=printSettings.smart;$(prefix+'Orientation').disabled=printSettings.smart}
 function printPaperPreview(source,o){const f=printFit(source.width,source.height,o);return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+f.width+' '+f.height+'" role="img" aria-label="Prévia do organograma na folha '+f.paper+'"><rect width="100%" height="100%" fill="white"/><rect x="'+f.margin+'" y="'+f.margin+'" width="'+(f.width-2*f.margin)+'" height="'+(f.height-2*f.margin)+'" fill="none" stroke="#98abc6" stroke-width="'+(f.width/1000)+'" stroke-dasharray="'+(f.width/180)+'"/>'+source.svg.replace('<svg ','<svg x="'+f.x+'" y="'+f.y+'" ').replace(/width="[^"]+" height="[^"]+"/,'width="'+f.w+'" height="'+f.h+'"')+'</svg>'}
 function printRefresh(){const o=printRead(),indices=printPages(o),index=indices[Number($('printPreviewPage').value)]??indices[0],source=printSource(index,o),f=printFit(source.width,source.height,o);$('printOrientation').disabled=o.smart;$('printPreview').innerHTML=printPaperPreview(source,o);$('printInfo').textContent=f.paper+' · '+f.width+' × '+f.height+' mm · '+(f.orientation==='landscape'?'Paisagem':'Retrato')+' · '+indices.length+' folha'+(indices.length>1?'s':'')+' · '+printQuality(index,o,f);$('printAllPagesRow').hidden=!isModel();$('printPreviewPage').innerHTML=indices.map((i,n)=>'<option value="'+n+'" '+(i===index?'selected':'')+'>'+esc(isModel()?project.pages[i].label:'Organograma')+'</option>').join('');$('printPreviewPageRow').hidden=indices.length<2;}
@@ -1928,7 +1928,7 @@ const printPreviousInfo=ioExportInfo;
 ioExportPDF=o=>printPDF({...printSettings,...o});
 ioExportInfo=function(){printPreviousInfo();if(!$('exportPaperSettings'))return;const isPDF=$('exportFormat').value==='pdf';$('exportPaperSettings').hidden=!isPDF;if(isPDF){const o={...printSettings,...ioOptions()},index=project.activePage||0,source=printSource(index,o),f=printFit(source.width,source.height,o);$('exportPrintOrientation').disabled=o.smart;$('exportScale').disabled=true;$('exportPreview').innerHTML=printPaperPreview(source,o);$('exportDimensions').textContent=f.paper+' · '+f.width+' × '+f.height+' mm · '+(f.orientation==='landscape'?'Paisagem':'Retrato')+' · '+printPages(o).length+' folha(s) · '+printQuality(index,o,f)}};
 function printInstall(){const btn=document.createElement('button');btn.id='printBtn';btn.title='Imprimir em A0, A1, A2, A3, A4 ou A5';btn.innerHTML='<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8V3h12v5M6 17H3V8h18v9h-3M6 14h12v7H6zM17 11h1"/></svg><span>Imprimir</span>';$('exportBtn').before(btn);btn.onclick=printOpen;
- const dialog=document.createElement('dialog');dialog.id='printDialog';dialog.setAttribute('aria-labelledby','printHeading');dialog.innerHTML='<div class="dialog-body"><div class="dialog-head"><h2 id="printHeading">Imprimir organograma</h2><button class="icon ghost" id="printClose" aria-label="Fechar">×</button></div><p>Escolha a folha e confira a prévia. O modo inteligente amplia os cartões sem modificar a posição deles no editor.</p><div class="print-layout"><div>'+printControls('print')+'<label class="check-row" id="printAllPagesRow"><input type="checkbox" id="printAllPages" checked>Todas as páginas</label><label class="check-row"><input type="checkbox" id="printTitle" checked>Incluir título</label><label class="check-row"><input type="checkbox" id="printLogo" checked>Incluir logo Sesé</label><label class="check-row"><input type="checkbox" id="printKeepData" checked>PDF com dados para reimportar</label></div><div class="print-preview-side"><div id="printPreview" class="print-preview"></div><label class="field" id="printPreviewPageRow"><span>Página da prévia</span><select id="printPreviewPage"></select></label><p class="help">A linha pontilhada indica as margens e não aparece na impressão.</p></div></div><div id="printInfo" class="export-dimensions"></div><p class="print-instructions">Na janela de impressão, use o papel escolhido, escala 100% e desative cabeçalhos e rodapés. Confira a orientação indicada na prévia. Para páginas com orientações diferentes ou para levar à gráfica, use Baixar PDF.</p><div id="printBusy" role="status" aria-live="polite" hidden>Preparando o organograma…</div></div><div class="dialog-foot"><button id="printDownload">Baixar PDF</button><button class="primary" id="printConfirm">Imprimir</button></div>';
+ const dialog=document.createElement('dialog');dialog.id='printDialog';dialog.setAttribute('aria-labelledby','printHeading');dialog.innerHTML='<div class="dialog-body"><div class="dialog-head"><h2 id="printHeading">Imprimir organograma</h2><button class="icon ghost" id="printClose" aria-label="Fechar">×</button></div><p>Escolha a folha e confira a prévia. O modo inteligente amplia os cartões sem modificar a posição deles no editor.</p><div class="print-layout"><div>'+printControls('print')+'<label class="check-row" id="printAllPagesRow"><input type="checkbox" id="printAllPages" checked>Todas as páginas</label><label class="check-row"><input type="checkbox" id="printTitle" checked>Incluir título</label><label class="check-row"><input type="checkbox" id="printLogo" checked>Incluir logo Sesé</label><label class="check-row"><input type="checkbox" id="printKeepData" checked>PDF com dados para reimportar</label></div><div class="print-preview-side"><div id="printPreview" class="print-preview"></div><label class="field" id="printPreviewPageRow"><span>Página da prévia</span><select id="printPreviewPage"></select></label><p class="help">A linha pontilhada indica as margens e não aparece na impressão.</p></div></div><div id="printInfo" class="export-dimensions"></div><p class="print-instructions">Na janela de impressão, use o papel escolhido, escala 100% e desative cabeçalhos e rodapés. No modo inteligente, selecione Paisagem também na janela da impressora. Para levar à gráfica, use Baixar PDF.</p><div id="printBusy" role="status" aria-live="polite" hidden>Preparando o organograma…</div></div><div class="dialog-foot"><button id="printDownload">Baixar PDF</button><button class="primary" id="printConfirm">Imprimir</button></div>';
  document.body.append(dialog);$('printClose').onclick=()=>dialog.close();$('printConfirm').onclick=printNative;$('printDownload').onclick=printDownload;for(const id of ['Smart','Paper','Orientation','Margin','AllPages','Title','Logo','KeepData','PreviewPage'])$('print'+id).onchange=printRefresh;
  const settings=document.createElement('div');settings.id='exportPaperSettings';settings.hidden=true;settings.innerHTML=printControls('exportPrint');$('exportFormat').closest('.two-cols').after(settings);printFill('exportPrint');for(const k of ['Smart','Paper','Orientation','Margin'])$('exportPrint'+k).onchange=()=>{printRead('exportPrint');ioExportInfo()};$('exportBtn').onclick=()=>{printFill('exportPrint');ioExportInfo();$('exportDialog').showModal()};for(const id of ['exportFormat','exportScale','transparentExport','includeTitle','includeLogo','keepEditData','exportAllPages'])if($(id))$(id).onchange=ioExportInfo;
  document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='p'){e.preventDefault();if(!$('printDialog').open&&!document.querySelector('dialog[open]'))printOpen()}});
@@ -2055,9 +2055,9 @@ function quickCut(edge){edCommit(()=>{if(edge.kind==='manual')project.manualLink
 function quickStartLink(ref){if(!edLookup(ref))return;ED.linkMode=true;ED.linkStart=ref;ED.refs=new Set([ref]);renderChart();notify('Clique no cartão ou na área de destino para criar a ligação. Esc cancela.');}
 const quickMenu=document.createElement('div');quickMenu.id='quickConnectionMenu';quickMenu.hidden=true;quickMenu.setAttribute('role','menu');document.body.append(quickMenu);
 function quickCloseMenu(){quickMenu.hidden=true;}
-function quickShowMenu(x,y,ref,edges){quickMenu.replaceChildren();const title=document.createElement('strong');title.textContent=ref?quickEdgeName(ref):'Ligações neste trecho';quickMenu.append(title);const add=(label,fn)=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.setAttribute('role','menuitem');b.onclick=()=>{quickCloseMenu();edSafe(fn);};quickMenu.append(b);};if(ref){add('Adicionar outra ligação…',()=>quickStartLink(ref));add('Editar este elemento',()=>{switchTab('people');edPick(ref);});}for(const e of edges)add('Ajustar / centralizar: '+quickEdgeName(e.from)+' → '+quickEdgeName(e.to),()=>flexOpen(e));for(const e of edges)add('Cortar: '+quickEdgeName(e.from)+' → '+quickEdgeName(e.to),()=>quickCut(e));if(!ref&&edges.length)add('Adicionar ligação a partir de '+quickEdgeName(edges[0].from),()=>quickStartLink(edges[0].from));if(!edges.length){const p=document.createElement('p');p.textContent='Nenhuma ligação neste elemento.';quickMenu.append(p);}quickMenu.hidden=false;quickMenu.style.left=Math.min(x,Math.max(8,innerWidth-quickMenu.offsetWidth-8))+'px';quickMenu.style.top=Math.min(y,Math.max(8,innerHeight-quickMenu.offsetHeight-8))+'px';quickMenu.querySelector('button')?.focus();}
+function quickShowMenu(x,y,ref,edges){quickMenu.replaceChildren();const title=document.createElement('strong');title.textContent=ref?quickEdgeName(ref):'Ligações neste trecho';quickMenu.append(title);const add=(label,fn)=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.setAttribute('role','menuitem');b.onclick=()=>{quickCloseMenu();edSafe(fn);};quickMenu.append(b);};if(ref){add('Adicionar outra ligação…',()=>quickStartLink(ref));add('Editar este elemento',()=>{switchTab('people');edPick(ref);});}for(const e of edges)add('Mudar posição da conexão: '+quickEdgeName(e.from)+' → '+quickEdgeName(e.to),()=>flexOpen(e));for(const e of edges)add('Cortar: '+quickEdgeName(e.from)+' → '+quickEdgeName(e.to),()=>quickCut(e));if(!ref&&edges.length)add('Adicionar ligação a partir de '+quickEdgeName(edges[0].from),()=>quickStartLink(edges[0].from));if(!edges.length){const p=document.createElement('p');p.textContent='Nenhuma ligação neste elemento.';quickMenu.append(p);}quickMenu.hidden=false;quickMenu.style.left=Math.min(x,Math.max(8,innerWidth-quickMenu.offsetWidth-8))+'px';quickMenu.style.top=Math.min(y,Math.max(8,innerHeight-quickMenu.offsetHeight-8))+'px';quickMenu.querySelector('button')?.focus();}
 const quickChartBase=edChartSVG;
-edChartSVG=function(){const svg=quickChartBase();let hit='';const lines=[...edConnectionLines(edNow()),...edManualLines(edNow())];for(const l of lines){const edges=l.quickEdges||(l.quickLink?[{kind:'manual',id:l.quickLink}]:[]);if(!edges.length)continue;hit+='<line class="quick-connection-hit" x1="'+l.x1+'" y1="'+l.y1+'" x2="'+l.x2+'" y2="'+l.y2+'" stroke="transparent" stroke-width="14" vector-effect="non-scaling-stroke" pointer-events="stroke" data-quick-edges="'+esc(JSON.stringify(edges))+'"><title>Botão direito: cortar ou adicionar ligação</title></line>';}
+edChartSVG=function(){const svg=quickChartBase();let hit='';const lines=[...edConnectionLines(edNow()),...edManualLines(edNow())];for(const l of lines){const edges=l.quickEdges||(l.quickLink?[{kind:'manual',id:l.quickLink}]:[]);if(!edges.length)continue;hit+='<line class="quick-connection-hit" x1="'+l.x1+'" y1="'+l.y1+'" x2="'+l.x2+'" y2="'+l.y2+'" stroke="transparent" stroke-width="14" vector-effect="non-scaling-stroke" pointer-events="stroke" data-quick-edges="'+esc(JSON.stringify(edges))+'"><title>Editar conexões: ajustar caminho. Botão direito: mais opções</title></line>';}
 const overlay=svg.search(/<rect class="(?:footer-block-hit|footer-hit|person-card ed-hit)"/);return overlay>=0?svg.slice(0,overlay)+hit+svg.slice(overlay):svg.replace('</svg>',hit+'</svg>');};
 $('stage').addEventListener('contextmenu',e=>{if(!isModel())return;const card=e.target.closest('[data-edit-ref]'),line=e.target.closest('[data-quick-edges]');if(!card&&!line)return;e.preventDefault();e.stopPropagation();const all=quickEdges();const edges=card?quickEdges(card.dataset.editRef):JSON.parse(line.dataset.quickEdges).map(k=>all.find(a=>k.kind==='manual'?a.kind==='manual'&&a.id===k.id:a.kind==='parent'&&a.from===k.from&&a.to===k.to)).filter(Boolean);quickShowMenu(e.clientX,e.clientY,card?.dataset.editRef||'',edges);});
 $('stage').addEventListener('pointerdown',e=>{if(e.button===2&&e.target.closest('[data-quick-edges]')){e.stopPropagation();}},true);
@@ -2573,5 +2573,227 @@ document.addEventListener('keydown',e=>{
 const saRenderBase=renderChart;renderChart=function(){if(SELECT_ALIGN.enabled&&SELECT_ALIGN.page!==edNow()){saCancelDrag(false);ED.refs.clear();SELECT_ALIGN.page=edNow();}saRenderBase();saPaint();};
 const saToolbarBase=edToolbar;edToolbar=function(){saToolbarBase();if($('edMultiBtn')){$('edMultiBtn').textContent='Selecionar e alinhar';$('edMultiBtn').onclick=()=>saToggle();}};
 renderChart();
-</script></body>
+</script><style id="connection-position-style">#connectionPositionBar{padding:12px 16px;background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;margin:8px 12px;color:#292524;max-height:36vh;overflow:auto}
+#connectionPositionBar[hidden],#connectionPositionBar [hidden]{display:none!important}
+.cr-heading,.cr-presets{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.cr-heading strong{font-size:14px}.cr-edge-label{display:flex;align-items:center;gap:8px;flex:1;min-width:200px}.cr-edge-label select{min-width:0;width:100%;max-width:600px}.cr-presets{margin:10px 0;font-size:12px}.cr-presets button,#crClose{font-size:12px;min-height:32px;padding:5px 10px}.cr-fields{display:grid;grid-template-columns:repeat(7,minmax(110px,1fr));gap:12px}.cr-fields label{font-size:12px;font-weight:600;display:flex;flex-wrap:wrap;justify-content:space-between;gap:5px}.cr-fields select,.cr-fields input{width:100%;min-width:0;margin:0;accent-color:#ea580c}.cr-fields output{font-size:11px;font-weight:400}.cr-fields select,.cr-edge-label select{background:#fff;color:#292524;border:1px solid #d6d3d1;border-radius:6px;padding:6px}.cr-help{font-size:12px;line-height:1.4;margin:8px 0 0}.cr-handle{cursor:grab;touch-action:none;outline:none}.cr-handle:focus>circle,.cr-handle:focus>path{stroke:#1d4ed8}.connection-editing .quick-connection-hit{cursor:pointer}.connection-editing [data-edit-ref]{cursor:crosshair!important}#crToggle[aria-pressed="true"]{background:#c2410c;color:white;border-color:#c2410c}
+@media(max-width:1100px){.cr-fields{grid-template-columns:repeat(4,minmax(110px,1fr))}}@media(max-width:600px){#connectionPositionBar{margin:5px;padding:10px;max-height:42vh}.cr-fields{grid-template-columns:repeat(2,minmax(100px,1fr))}.cr-heading strong{flex-basis:100%}.cr-edge-label{min-width:150px}}
+@media print{#connectionPositionBar,#crToggle,.cr-overlay{display:none!important}}
+.org-dark #connectionPositionBar{background:#222c3b;color:#f5f5f4;border-color:#9a5d2c}.org-dark .cr-fields select,.org-dark .cr-edge-label select{background:#172337;color:#f5f5f4;border-color:#586779}.org-dark .cr-overlay{filter:invert(1) hue-rotate(180deg)}
+</style>
+<script id="connection-position-script">/* Edição visual do traçado: altera apenas a rota, mantendo os vínculos. */
+const CR={enabled:false,edge:null,preview:null,drag:null,page:null,options:''};
+const crSides=['top','bottom','left','right'];
+function crNumber(v,fallback,min,max){const n=Number(v);return Number.isFinite(n)?Math.max(min,Math.min(max,n)):fallback;}
+const crOldClean=flexClean;
+flexClean=function(raw){const clean=crOldClean(raw);for(const key of Object.keys(clean)){const v=raw[key];if(v.routeVersion===2)Object.assign(clean[key],{routeVersion:2,route:v.route==='straight'?'straight':'elbow',offset:crNumber(v.offset,0,-2500,2500)});}return clean;};
+function crEdges(page=edNow()){const edges=[];for(const e of edEntries(page))for(const from of edParents(e))if(edLookup(from)?.page===page)edges.push({kind:'parent',from,to:e.ref});for(const l of project.manualLinks||[])if(edLookup(l.from)?.page===page&&edLookup(l.to)?.page===page)edges.push({kind:'manual',id:l.id,from:l.from,to:l.to});return edges;}
+function crDefaults(edge){const a=edLookup(edge.from).item,b=edLookup(edge.to).item;let fromSide,toSide,axis;if(b.y>=a.y+a.h+12){fromSide='bottom';toSide='top';axis='y';}else if(a.y>=b.y+b.h+12){fromSide='top';toSide='bottom';axis='y';}else if(edCX(b)>=edCX(a)){fromSide='right';toSide='left';axis='x';}else{fromSide='left';toSide='right';axis='x';}return {routeVersion:2,fromSide,toSide,axis,fromPos:50,toPos:50,bend:50,offset:0,route:'elbow'};}
+function crSetting(edge){return {...crDefaults(edge),...project.connectionSettings?.[flexKey(edge)],routeVersion:2};}
+function crPort(entry,side,pos){const p=flexPoint(entry.item,side,pos);if(entry.kind==='group'&&side==='left')p.x-=12;return p;}
+function crCompact(points){const out=[];for(const p of points){const last=out.at(-1);if(last&&Math.abs(last.x-p.x)<.001&&Math.abs(last.y-p.y)<.001)continue;out.push(p);while(out.length>2){const [a,b,c]=out.slice(-3);if((a.x===b.x&&b.x===c.x&&(b.y-a.y)*(c.y-b.y)>=0)||(a.y===b.y&&b.y===c.y&&(b.x-a.x)*(c.x-b.x)>=0))out.splice(-2,1);else break;}}return out;}
+function crGeometry(edge,s){
+ const a=edLookup(edge.from),b=edLookup(edge.to);if(!a||!b||a.page!==b.page)return null;
+ const p=crPort(a,s.fromSide,s.fromPos),q=crPort(b,s.toSide,s.toPos),normals={top:{x:0,y:-1},bottom:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}},u=normals[s.fromSide],v=normals[s.toSide];let stub=24;
+ const facingGap=(q.x-p.x)*u.x+(q.y-p.y)*u.y;if(u.x===-v.x&&u.y===-v.y&&facingGap>0)stub=Math.min(stub,facingGap/3);
+ const p1={x:p.x+u.x*stub,y:p.y+u.y*stub},q1={x:q.x+v.x*stub,y:q.y+v.y*stub};
+ const axis=s.axis==='x'?'x':'y',other=axis==='x'?'y':'x',base=p1[axis]+(q1[axis]-p1[axis])*(s.bend/100);let middle=base+(s.offset||0);
+ let low=-Infinity,high=Infinity;for(const [point,normal] of [[p1,u],[q1,v]]){if(normal[axis]>0)low=Math.max(low,point[axis]);if(normal[axis]<0)high=Math.min(high,point[axis]);}
+ if(low<=high)middle=Math.max(low,Math.min(high,middle));
+ let points=s.route==='straight'?[p,q]:[p,p1,{[axis]:middle,[other]:p1[other]},{[axis]:middle,[other]:q1[other]},q1,q];
+ // Saídas voltadas para fora, em lados opostos: contorna os dois elementos.
+ if(s.route!=='straight'&&low>high){const size=other==='x'?'w':'h',detour=Math.max(a.item[other]+a.item[size],b.item[other]+b.item[size])+36;points=[p,p1,{[axis]:p1[axis],[other]:detour},{[axis]:middle,[other]:detour},{[axis]:q1[axis],[other]:detour},q1,q];}
+ points=points.map((p,i)=>i===0||i===points.length-1?p:{x:Math.max(0,p.x),y:Math.max(0,p.y)});
+ const compact=crCompact(points),segments=compact.slice(1).map((b,i)=>({a:compact[i],b})),rail=segments.filter(l=>Math.abs(l.a[axis]-l.b[axis])<.001).sort((a,b)=>Math.abs(b.a[other]-b.b[other])-Math.abs(a.a[other]-a.b[other]))[0];
+ const handle=rail?{x:(rail.a.x+rail.b.x)/2,y:(rail.a.y+rail.b.y)/2}:{x:(p.x+q.x)/2,y:(p.y+q.y)/2};
+ return {points:compact,p,q,axis,base,middle,handle};
+}
+function crSegments(edge,s){const geometry=crGeometry(edge,s);if(!geometry)return [];const manual=edge.kind==='manual'?(project.manualLinks||[]).find(l=>l.id===edge.id):null;return geometry.points.slice(1).map((b,i)=>{const a=geometry.points[i];return {type:'line',x1:a.x,y1:a.y,x2:b.x,y2:b.y,color:manual?.color||project.style.line,width:manual?.width||1.35,...(edge.kind==='manual'?{quickLink:edge.id}:{quickEdges:[edge]})};});}
+const crOldFlexLines=flexLines;
+flexLines=function(edge,s){return s.routeVersion===2?crSegments(edge,s):crOldFlexLines(edge,s);};
+const crOldSetting=flexSetting;
+flexSetting=function(edge){return CR.preview&&CR.edge&&flexKey(CR.edge)===flexKey(edge)?CR.preview:crOldSetting(edge);};
+// Trechos exatamente coincidentes são desenhados uma só vez, preservando os destinos.
+function crMerge(lines){const buckets=new Map(),other=[];for(const l of lines){const axis=l.y1===l.y2?'x':l.x1===l.x2?'y':'';if(!axis){other.push(l);continue;}const fixed=axis==='x'?l.y1:l.x1,key=JSON.stringify([axis,fixed,l.color,l.width]);if(!buckets.has(key))buckets.set(key,[]);buckets.get(key).push({...l,axis,start:Math.min(l[axis+'1'],l[axis+'2']),end:Math.max(l[axis+'1'],l[axis+'2'])});}
+ for(const list of buckets.values()){list.sort((a,b)=>a.start-b.start);let current=null;for(const line of list){if(current&&line.start<=current.end+.001){current.end=Math.max(current.end,line.end);const edges=[...(current.quickEdges||[]),...(line.quickEdges||[])];current.quickEdges=[...new Map(edges.map(e=>[flexKey(e),e])).values()];}else{if(current)emit(current);current={...line};}}if(current)emit(current);}
+ function emit(l){const result={...l,[l.axis+'1']:l.start,[l.axis+'2']:l.end};delete result.axis;delete result.start;delete result.end;if(result.x1!==result.x2||result.y1!==result.y2)other.push(result);}return other;
+}
+const crParentBase=edConnectionLines;
+edConnectionLines=function(page){return crMerge(crParentBase(page));};
+// Amplia a página e posiciona o rodapé depois dos desvios, sem cortar o traçado.
+const crFooterBase=modelFooterY;
+modelFooterY=function(page=edNow()){const lines=[...edConnectionLines(page),...edManualLines(page)];return Math.max(crFooterBase(page),...lines.map(l=>Math.max(l.y1,l.y2)+45));};
+const crDimsBase=modelDims;
+modelDims=function(page=edNow()){const dims=crDimsBase(page),lines=[...edConnectionLines(page),...edManualLines(page)];return {...dims,width:Math.max(dims.width,...lines.map(l=>Math.max(l.x1,l.x2)+42))};};
+function crCurrent(){return CR.preview||(CR.edge?crSetting(CR.edge):null);}
+function crSave(setting){if(!CR.edge)return;const edge={...CR.edge},key=flexKey(edge),clean=flexClean({[key]:setting})[key];CR.preview=null;if(!crEdges().some(e=>flexKey(e)===key))return;edCommit(()=>{project.connectionSettings=project.connectionSettings||{};project.connectionSettings[key]=clean;});}
+function crSelect(edge){crCancelDrag();CR.preview=null;CR.edge=edge;crPaint();renderChart();}
+function crToggle(on=!CR.enabled,edge=null){
+ crCancelDrag();CR.preview=null;if(on&&!isModel())return;CR.enabled=!!on;CR.page=edNow();
+ if(on){if(SELECT_ALIGN.enabled)saToggle(false);ED.multi=false;ED.linkMode=false;ED.linkStart='';ED.refs.clear();selected=null;ED.context={kind:'page',id:edNow()};if(typeof personDrawerClose==='function')personDrawerClose();CR.edge=edge||crEdges()[0]||null;}
+ else CR.edge=null;crPaint();renderChart();
+}
+function crPreset(mode){if(!CR.edge)return;let s=crDefaults(CR.edge);if(mode==='straight')s.route='straight';else if(crSides.includes(mode)){s.fromSide=mode;s.toSide=mode;s.axis=['top','bottom'].includes(mode)?'y':'x';const a=edLookup(CR.edge.from).item,b=edLookup(CR.edge.to).item,g=crGeometry(CR.edge,s),size=s.axis==='x'?'w':'h',target=['top','left'].includes(mode)?Math.min(a[s.axis],b[s.axis])-44:Math.max(a[s.axis]+a[size],b[s.axis]+b[size])+44;s.offset=target-g.base;}crSave(s);}
+function crFormValue(){return {...crCurrent(),routeVersion:2,fromSide:$('crFromSide').value,toSide:$('crToSide').value,fromPos:Number($('crFromPos').value),toPos:Number($('crToPos').value),axis:$('crAxis').value,route:$('crRoute').value,offset:crNumber($('crOffset').value,0,-2500,2500)};}
+function crPreviewForm(){if(!CR.edge)return;CR.preview=crFormValue();renderChart();}
+function crPaint(){
+ const on=CR.enabled&&isModel();$('crToggle').hidden=!isModel();$('crToggle').textContent=on?'Concluir conexões':'Editar conexões';$('crToggle').setAttribute('aria-pressed',String(on));$('connectionPositionBar').hidden=!on;$('viewport').classList.toggle('connection-editing',on);if(!on)return;
+ const edges=crEdges(),key=CR.edge?flexKey(CR.edge):'',signature=JSON.stringify(edges.map(e=>[flexKey(e),quickEdgeName(e.from),quickEdgeName(e.to)]));
+ if(signature!==CR.options){CR.options=signature;const select=$('crEdge');select.replaceChildren();for(const edge of edges){const option=document.createElement('option');option.value=flexKey(edge);option.textContent=quickEdgeName(edge.from)+' → '+quickEdgeName(edge.to)+(edge.kind==='manual'?' (ligação manual)':'');select.append(option);}}
+ $('crEdge').value=key;$('crEdge').disabled=!edges.length;$('crEmpty').hidden=!!edges.length;$('crControls').hidden=!CR.edge;$('crHint').textContent=CR.preview?'Prévia do ajuste. Solte o ponto ou o controle para salvar.':'Clique numa linha ou num cartão para escolher a ligação. Arraste os círculos para mudar a entrada/saída e o losango para deslocar a dobra. Use Desfazer para voltar.';
+ if(!CR.edge)return;const s=crCurrent();for(const [id,k] of [['crFromSide','fromSide'],['crToSide','toSide'],['crFromPos','fromPos'],['crToPos','toPos'],['crAxis','axis'],['crRoute','route'],['crOffset','offset']])if(document.activeElement!==$(id))$(id).value=s[k]??(k==='offset'?0:'elbow');
+ $('crFromPosOut').textContent=s.fromPos+'%';$('crToPosOut').textContent=s.toPos+'%';$('crOffsetOut').textContent=(s.offset||0)+' px';$('crAxis').disabled=s.route==='straight';$('crOffset').disabled=s.route==='straight';
+ $('crAuto').disabled=!project.connectionSettings?.[key];
+}
+function crOverlay(){if(!CR.enabled||!CR.edge)return '';const edge=CR.edge,s=crCurrent(),g=crGeometry(edge,s);if(!g)return '';const radius=7/Math.max(.015,view.scale),custom=flexSetting(edge);let segments;
+ if(custom)segments=flexLines(edge,custom);else segments=(edge.kind==='manual'?edManualLines(edNow()).filter(l=>l.quickLink===edge.id):edConnectionLines(edNow()).filter(l=>(l.quickEdges||[]).some(e=>e.from===edge.from&&e.to===edge.to)));
+ const path=segments.map(l=>'M'+l.x1+' '+l.y1+' L'+l.x2+' '+l.y2).join(' ');
+ let markup='<g class="cr-overlay"><path d="'+path+'" fill="none" stroke="#f97316" stroke-width="3" vector-effect="non-scaling-stroke" pointer-events="none"/>';
+ const handles=[['from',g.p,'Arraste o ponto de saída'],['to',g.q,'Arraste o ponto de entrada']];if(s.route!=='straight')handles.push(['bend',g.handle,'Arraste a dobra da conexão']);
+ for(const [type,p,label] of handles){markup+='<g class="cr-handle" data-cr-handle="'+type+'" tabindex="0" role="slider" aria-label="'+label+'" aria-valuemin="'+(type==='bend'?-2500:0)+'" aria-valuemax="'+(type==='bend'?2500:100)+'" aria-valuenow="'+(type==='bend'?s.offset||0:type==='from'?s.fromPos:s.toPos)+'" transform="translate('+p.x+' '+p.y+')"><circle r="'+(radius*1.8)+'" fill="transparent"/>'+(type==='bend'?'<path d="M 0 '+(-radius*1.2)+' L '+(radius*1.2)+' 0 L 0 '+(radius*1.2)+' L '+(-radius*1.2)+' 0 Z"':'<circle r="'+radius+'"')+' fill="#fff" stroke="#ea580c" stroke-width="2.5" vector-effect="non-scaling-stroke"/><title>'+label+'</title></g>';}
+ return markup+'</g>';
+}
+const crChartBase=edChartSVG;
+edChartSVG=function(){return crChartBase().replace('</svg>',crOverlay()+'</svg>');};
+function crWorld(event){const r=$('viewport').getBoundingClientRect();return {x:(event.clientX-r.left-view.x)/view.scale,y:(event.clientY-r.top-view.y)/view.scale};}
+function crNearestPort(entry,p){const choices=crSides.map(side=>{const horizontal=side==='top'||side==='bottom',n=entry.item,pos=crNumber(100*(p[horizontal?'x':'y']-n[horizontal?'x':'y'])/n[horizontal?'w':'h'],50,0,100),point=crPort(entry,side,pos);return {side,pos:Math.round(pos),distance:Math.hypot(p.x-point.x,p.y-point.y)};});return choices.sort((a,b)=>a.distance-b.distance)[0];}
+function crCancelDrag(){const d=CR.drag;CR.drag=null;CR.preview=null;if(d&&$('viewport').hasPointerCapture?.(d.pointer))$('viewport').releasePointerCapture(d.pointer);}
+function crDown(event){if(!CR.enabled||event.button!==0||!isModel())return;const handle=event.target.closest('[data-cr-handle]'),line=event.target.closest('[data-quick-edges]'),card=event.target.closest('[data-edit-ref],[data-card-edit]');if(!handle&&!line&&!card)return;event.preventDefault();event.stopImmediatePropagation();
+ if(handle&&CR.edge){if(CR.drag)return;CR.drag={pointer:event.pointerId,type:handle.dataset.crHandle,start:{...crCurrent()},point:crWorld(event),moved:false};CR.preview={...crCurrent()};$('viewport').setPointerCapture(event.pointerId);return;}
+ let edges=[];if(card){const ref=card.dataset.editRef||'p:'+card.dataset.cardEdit;edges=crEdges().filter(e=>e.from===ref||e.to===ref);}else{let keys=[];try{keys=JSON.parse(line.dataset.quickEdges);}catch{}edges=crEdges().filter(e=>keys.some(k=>e.kind===k.kind&&(e.kind==='manual'?e.id===k.id:e.from===k.from&&e.to===k.to)));}
+ if(!edges.length)return notify('Este elemento não tem ligações.');const current=edges.findIndex(e=>CR.edge&&flexKey(e)===flexKey(CR.edge));crSelect(edges[(current+1)%edges.length]);if(edges.length>1)notify(edges.length+' ligações neste trecho. Clique novamente ou escolha na lista.');
+}
+function crMove(event){const d=CR.drag;if(!d||d.pointer!==event.pointerId)return;event.preventDefault();event.stopImmediatePropagation();const p=crWorld(event);d.moved=d.moved||Math.hypot(p.x-d.point.x,p.y-d.point.y)*view.scale>2;if(!d.moved)return;const s={...d.start};
+ if(d.type==='bend'){const g=crGeometry(CR.edge,d.start);s.offset=crNumber(Math.round(g.middle+p[g.axis]-d.point[g.axis]-g.base),0,-2500,2500);}else{const ref=d.type==='from'?CR.edge.from:CR.edge.to,port=crNearestPort(edLookup(ref),p);s[d.type+'Side']=port.side;s[d.type+'Pos']=port.pos;}
+ CR.preview=s;renderChart();
+}
+function crUp(event){const d=CR.drag;if(!d||d.pointer!==event.pointerId)return;event.preventDefault();event.stopImmediatePropagation();if(event.type!=='pointercancel')crMove(event);const s=CR.preview&&{...CR.preview},save=event.type!=='pointercancel'&&d.moved;crCancelDrag();if(save)crSave(s);else renderChart();}
+
+const crButton=document.createElement('button');crButton.id='crToggle';crButton.className='soft';crButton.type='button';crButton.textContent='Editar conexões';crButton.setAttribute('aria-controls','connectionPositionBar');crButton.onclick=()=>crToggle();$('orgCanvasTools').append(crButton);
+const crBar=document.createElement('section');crBar.id='connectionPositionBar';crBar.hidden=true;crBar.setAttribute('aria-label','Posição das conexões');
+const crSideOptions=crSides.map((s,i)=>'<option value="'+s+'">'+['Topo','Base','Esquerda','Direita'][i]+'</option>').join('');
+crBar.innerHTML='<div class="cr-heading"><strong>Posição das conexões</strong><label class="cr-edge-label">Ligação <select id="crEdge" aria-label="Escolher a ligação"></select></label><button type="button" id="crClose">Concluir</button></div><p id="crEmpty" hidden>Nenhuma ligação nesta página.</p><div id="crControls"><div class="cr-presets"><span>Desviar por:</span>'+[['top','Cima'],['bottom','Baixo'],['left','Esquerda'],['right','Direita'],['short','Caminho curto'],['straight','Linha reta']].map(([p,t])=>'<button type="button" data-cr-preset="'+p+'">'+t+'</button>').join('')+'<button type="button" id="crAuto">Restaurar automático</button></div><div class="cr-fields"><label>Saída <select id="crFromSide">'+crSideOptions+'</select></label><label>Ponto da saída <output id="crFromPosOut"></output><input id="crFromPos" type="range" min="0" max="100" step="1"></label><label>Entrada <select id="crToSide">'+crSideOptions+'</select></label><label>Ponto da entrada <output id="crToPosOut"></output><input id="crToPos" type="range" min="0" max="100" step="1"></label><label>Traçado <select id="crRoute"><option value="elbow">Com dobras (90°)</option><option value="straight">Linha reta</option></select></label><label>Mover dobra <select id="crAxis"><option value="y">Acima / abaixo</option><option value="x">Esquerda / direita</option></select></label><label>Deslocamento <output id="crOffsetOut"></output><input id="crOffset" type="range" min="-2500" max="2500" step="5"></label></div></div><p id="crHint" class="cr-help" role="status"></p>';
+$('orgCanvasTools').after(crBar);
+$('crEdge').onchange=()=>{const edge=crEdges().find(e=>flexKey(e)===$('crEdge').value);if(edge)crSelect(edge);};$('crClose').onclick=()=>crToggle(false);
+crBar.querySelectorAll('[data-cr-preset]').forEach(b=>b.onclick=()=>edSafe(()=>crPreset(b.dataset.crPreset)));
+$('crAuto').onclick=()=>{if(!CR.edge)return;CR.preview=null;const key=flexKey(CR.edge);edCommit(()=>{delete project.connectionSettings[key];});};
+for(const id of ['crFromSide','crToSide','crAxis','crRoute'])$(id).onchange=()=>crSave(crFormValue());
+for(const id of ['crFromPos','crToPos','crOffset']){$(id).oninput=crPreviewForm;$(id).onchange=()=>crSave(crFormValue());$(id).onblur=()=>{if(CR.preview)crSave(crFormValue());};}
+// Captura antes do arraste de cartões; o espaço vazio continua permitindo navegação.
+$('viewport').addEventListener('pointerdown',crDown,true);$('viewport').addEventListener('pointermove',crMove,true);$('viewport').addEventListener('pointerup',crUp,true);$('viewport').addEventListener('pointercancel',crUp,true);
+$('viewport').addEventListener('lostpointercapture',()=>{if(CR.drag){crCancelDrag();renderChart();}});
+$('viewport').addEventListener('click',e=>{if(CR.enabled&&e.target.closest('[data-cr-handle],[data-quick-edges],[data-edit-ref],[data-card-edit]')){e.preventDefault();e.stopImmediatePropagation();}},true);
+document.addEventListener('keydown',e=>{if(!CR.enabled||document.querySelector('dialog[open]'))return;if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();if(CR.drag||CR.preview){crCancelDrag();renderChart();}else crToggle(false);return;}const handle=e.target.closest('[data-cr-handle]');if(!handle||!CR.edge||!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))return;e.preventDefault();e.stopImmediatePropagation();const s={...crCurrent()},direction=['ArrowLeft','ArrowUp'].includes(e.key)?-1:1,kind=handle.dataset.crHandle;if(kind==='bend')s.offset=crNumber((s.offset||0)+direction*(e.shiftKey?50:5),0,-2500,2500);else s[kind+'Pos']=crNumber(s[kind+'Pos']+direction*(e.shiftKey?10:1),50,0,100);crSave(s);$('stage').querySelector('[data-cr-handle="'+kind+'"]')?.focus({preventScroll:true});},true);
+const crRenderBase=renderChart;
+renderChart=function(){if(CR.enabled){if(CR.page!==edNow()||!isModel()){crCancelDrag();CR.page=edNow();CR.edge=null;}if(CR.edge&&!crEdges().some(e=>flexKey(e)===flexKey(CR.edge))){crCancelDrag();CR.edge=null;}}crRenderBase();crPaint();};
+const crApplyViewBase=applyView;applyView=function(){crApplyViewBase();if(CR.enabled){const svg=$('stage').querySelector('svg');if(svg){svg.querySelector('.cr-overlay')?.remove();svg.insertAdjacentHTML('beforeend',crOverlay());}}};
+const crSaBase=saToggle;saToggle=function(on=!SELECT_ALIGN.enabled){if(on&&CR.enabled)crToggle(false);return crSaBase(on);};
+const crMoveBase=intelEnableManual;intelEnableManual=function(){if(CR.enabled)crToggle(false);return crMoveBase();};
+const crLinkBase=edToggleManual;edToggleManual=function(){if(CR.enabled)crToggle(false);return crLinkBase();};
+const crQuickLinkBase=quickStartLink;quickStartLink=function(ref){if(CR.enabled)crToggle(false);return crQuickLinkBase(ref);};
+flexOpen=function(edge){quickCloseMenu();crToggle(true,edge);};
+project.connectionSettings=flexClean(project.connectionSettings);
+renderChart();
+</script>
+<style id="shared-centers-style">.shared-connection-info{margin:10px 0 16px;padding:12px;border:1px solid var(--border);border-left:3px solid #0f766e;border-radius:8px;background:var(--tint)}.shared-connection-info strong{font-size:13px}.shared-connection-info p{font-size:13px;line-height:1.5;margin:7px 0}.shared-connection-info .help{font-size:12px}#scGuidesToggle[aria-pressed=true]{border-color:#b7791f;box-shadow:inset 0 -2px #b7791f}.sc-center-guides{pointer-events:none}.org-dark .sc-center-guides{filter:invert(1) hue-rotate(180deg)}@media print{.sc-center-guides,#scGuidesToggle{display:none!important}}
+</style>
+<script id="shared-centers-script">/* Ligações compartilhadas pelo departamento, sem alterar superiores cadastrados. */
+const SC={scope:null,guides:true};
+try{SC.guides=localStorage.getItem('org-center-guides')!=='off';}catch{}
+const scParentsBase=edParents;
+function scDepartment(e){return e?.kind==='group'&&!departmentIsShift(e.item);}
+function scProjection(page=edNow(),doc=project){
+ const entries=edEntries(page,doc),map=new Map(entries.map(e=>[e.ref,e])),parents=new Map(entries.map(e=>[e.ref,[...new Set(scParentsBase(e))]])),hidden=[];
+ function throughDepartment(ref,target,seen=new Set()){
+  if(seen.has(ref))return false;seen.add(ref);const group=map.get(ref);if(!scDepartment(group))return false;
+  return (parents.get(ref)||[]).some(p=>p===target||throughDepartment(p,target,seen));
+ }
+ // Só simplifica um caminho que já existe; não cria um vínculo pela mera associação à área.
+ for(const e of entries){if(e.kind!=='person')continue;const original=parents.get(e.ref),departments=original.filter(r=>scDepartment(map.get(r)));
+  const remove=new Set();for(const from of original.filter(r=>map.get(r)?.kind==='person')){const via=departments.find(r=>throughDepartment(r,from));if(via){remove.add(from);hidden.push({kind:'parent',from,to:e.ref,via});}}
+  parents.set(e.ref,original.filter(r=>!remove.has(r)));
+ }
+ const hiddenManual=new Set();
+ for(const link of doc.manualLinks||[]){if(!map.has(link.from)||!map.has(link.to))continue;
+  const sameParent=(parents.get(link.to)||[]).includes(link.from)||(parents.get(link.from)||[]).includes(link.to),sameShared=hidden.some(e=>(e.from===link.from&&e.to===link.to)||(e.to===link.from&&e.from===link.to));
+  if(sameParent||sameShared)hiddenManual.add(link.id);
+ }
+ return {parents,hidden,hiddenManual};
+}
+edParents=function(e){return SC.scope?.doc===project&&SC.scope.parents.has(e.ref)?SC.scope.parents.get(e.ref):scParentsBase(e);};
+function scWithProjection(page,fn){const prior=SC.scope;SC.scope={doc:project,...scProjection(page)};try{return fn();}finally{SC.scope=prior;}}
+const scLinesBase=edConnectionLines;edConnectionLines=function(page){return scWithProjection(page,()=>scLinesBase(page));};
+const scManualBase=edManualLines;edManualLines=function(page){const hidden=scProjection(page).hiddenManual;return scManualBase(page).filter(l=>!hidden.has(l.quickLink));};
+function scVisibleEdges(edges,page=edNow()){const p=scProjection(page);return edges.filter(e=>e.kind==='manual'?!p.hiddenManual.has(e.id):!p.hidden.some(h=>h.from===e.from&&h.to===e.to));}
+const scQuickBase=quickEdges;quickEdges=function(ref){return scVisibleEdges(scQuickBase(ref));};
+const scCrBase=crEdges;crEdges=function(page=edNow()){return scVisibleEdges(scCrBase(page),page);};
+function scBossInfo(n,doc=project){
+ const entry=edLookup('p:'+n.id,doc);if(!entry)return {names:[],refs:[],inherited:false};const parents=scParentsBase(entry),direct=parents.filter(r=>edLookup(r,doc)?.kind==='person');let refs=[...direct];
+ if(!refs.length){const seen=new Set();function visit(r){if(seen.has(r))return;seen.add(r);const e=edLookup(r,doc);if(!scDepartment(e))return;for(const p of scParentsBase(e)){const boss=edLookup(p,doc);if(boss?.kind==='person')refs.push(p);else visit(p);}}parents.forEach(visit);}
+ refs=[...new Set(refs)].filter(r=>r!=='p:'+n.id).sort((a,b)=>edLookup(a,doc).item.name.localeCompare(edLookup(b,doc).item.name,'pt-BR'));
+ return {refs,names:refs.map(r=>edLookup(r,doc).item.name),inherited:!direct.length&&refs.length>0};
+}
+function scBossLabel(n){const info=scBossInfo(n);if(!info.names.length)return '';const prefix=info.inherited?'Superior do depto.: ':'Superior: ',names=info.names.join(' / ');return prefix+(names.length<=65?names:info.names[0].slice(0,55)+(info.names[0].length>55?'…':'')+(info.names.length>1?' + '+(info.names.length-1):''));}
+function scInformation(){
+ $('sharedConnectionInfo')?.remove();if(!isModel()||ED.context.kind!=='person')return;const n=project.people.find(p=>p.id===ED.context.id);if(!n)return;
+ const info=scBossInfo(n),shared=scProjection(n.page).hidden.filter(e=>e.to==='p:'+n.id),section=document.createElement('section');section.id='sharedConnectionInfo';section.className='shared-connection-info';
+ const heading=document.createElement('strong');heading.textContent=info.inherited?'Superior do departamento':'Superior imediato';section.append(heading);
+ const names=document.createElement('p');names.textContent=info.names.join(' · ')||'Não informado';section.append(names);
+ for(const e of shared){const note=document.createElement('p');note.className='help';note.textContent=quickEdgeName(e.from)+' → '+quickEdgeName(e.via)+' → '+n.name+'. A ligação é compartilhada pelo departamento; '+quickEdgeName(e.from)+' continua cadastrado como superior imediato.';section.append(note);}
+ if(info.inherited){const note=document.createElement('p');note.className='help';note.textContent='Informação do departamento. Nenhum superior individual foi acrescentado ao cadastro.';section.append(note);}
+ const anchor=$('departmentConnection')||$('multiBossBox');if(anchor)anchor.after(section);else $('peoplePanel').append(section);
+}
+const scPeopleBase=renderPeople;renderPeople=function(){scPeopleBase();scInformation();};
+
+/* Guias são somente sobreposições da edição, não fazem parte da exportação. */
+function scGuideGeometry(doc,page,refs,scale){
+ const entries=edEntries(page,doc),selected=new Set(refs),chosen=entries.filter(e=>selected.has(e.ref));if(!chosen.length)return {selection:null,near:[]};
+ const left=Math.min(...chosen.map(e=>e.item.x)),right=Math.max(...chosen.map(e=>e.item.x+e.item.w)),top=Math.min(...chosen.map(e=>e.item.y)),bottom=Math.max(...chosen.map(e=>e.item.y+e.item.h)),selection={x:(left+right)/2,y:(top+bottom)/2,left,right,top,bottom},near=[];
+ for(const axis of ['x','y']){const size=axis==='x'?'w':'h',candidates=entries.filter(e=>!selected.has(e.ref)).map(e=>({ref:e.ref,value:e.item[axis]+e.item[size]/2,distance:Math.abs(e.item[axis]+e.item[size]/2-selection[axis])})).filter(p=>p.distance<=7/Math.max(.015,scale)).sort((a,b)=>a.distance-b.distance);if(candidates[0])near.push({axis,...candidates[0]});}
+ return {selection,near};
+}
+function scGuideSVG(){if(!SC.guides||!isModel())return '';const w=layout.width,h=layout.height,k=Math.max(.015,view.scale),g=scGuideGeometry(project,edNow(),ED.refs,k);let content='';
+ function line(x1,y1,x2,y2,color,width=1,dash='6 5'){content+='<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="'+color+'" stroke-width="'+width+'" stroke-dasharray="'+dash+'" vector-effect="non-scaling-stroke"/>';}
+ line(w/2,0,w/2,h,'#b7791f');line(0,h/2,w,h/2,'#b7791f');
+ content+='<text x="'+(w/2+7/k)+'" y="'+(15/k)+'" font-size="'+(11/k)+'" font-family="Arial,sans-serif" fill="#9a6700">Centro da página</text>';
+ if(g.selection){line(g.selection.x,0,g.selection.x,h,'#7c3aed',1,'3 5');line(0,g.selection.y,w,g.selection.y,'#7c3aed',1,'3 5');}
+ for(const near of g.near){const color=near.distance*k<=1?'#059669':'#0891b2';if(near.axis==='x')line(near.value,0,near.value,h,color,1.7,'5 3');else line(0,near.value,w,near.value,color,1.7,'5 3');}
+ return '<g class="sc-center-guides" aria-hidden="true" pointer-events="none">'+content+'</g>';
+}
+function scInsertGuides(svg){const guides=scGuideSVG();if(!guides)return svg;const background=svg.match(/<rect width="100%" height="100%"[^>]*\/>/);const at=background?background.index+background[0].length:svg.indexOf('>')+1;return svg.slice(0,at)+guides+svg.slice(at);}
+const scChartBase=edChartSVG;edChartSVG=function(){return scInsertGuides(scChartBase());};
+function scRefreshGuides(){const svg=$('stage').querySelector('svg');if(!svg)return;svg.querySelector('.sc-center-guides')?.remove();const guides=scGuideSVG();if(!guides)return;const bg=svg.querySelector('rect[width="100%"]');if(bg)bg.insertAdjacentHTML('afterend',guides);else svg.insertAdjacentHTML('afterbegin',guides);}
+const scViewBase=applyView;applyView=function(){scViewBase();scRefreshGuides();};
+const scPaintBase=saPaint;saPaint=function(){scPaintBase();scRefreshGuides();};
+const scButton=document.createElement('button');scButton.id='scGuidesToggle';scButton.type='button';scButton.className='soft';scButton.title='Guias do centro da página, da seleção e dos cartões próximos. Não saem na impressão.';scButton.textContent='Linhas de centro';scButton.setAttribute('aria-pressed',String(SC.guides));
+scButton.onclick=()=>{SC.guides=!SC.guides;try{localStorage.setItem('org-center-guides',SC.guides?'on':'off');}catch{}scButton.setAttribute('aria-pressed',String(SC.guides));scRefreshGuides();};$('saToggle').insertAdjacentElement('afterend',scButton);
+const scRenderBase=renderChart;renderChart=function(){scRenderBase();scButton.hidden=!isModel();};
+renderAll();
+</script>
+<style id="header-pages-style">body.pages-in-header .app-header{display:flex;align-items:center;justify-content:flex-start;gap:18px;padding:10px 18px;min-height:66px}
+body.pages-in-header .app-header .brand-copy{display:block}
+body.pages-in-header .app-header>.model-pages{display:flex;flex:1;min-width:0;gap:10px;padding:0;border:0;background:transparent;align-items:center;justify-content:flex-start}
+body.pages-in-header .app-header>.model-pages[hidden]{display:none!important}
+body.pages-in-header .app-header>.model-pages .model-tabs{display:flex;flex:0 1 auto;min-width:0;gap:6px;flex-wrap:nowrap;max-height:none;overflow-x:auto;padding:3px 1px;scrollbar-width:thin}
+body.pages-in-header .app-header>.model-pages .model-tabs button{flex:none;white-space:nowrap;font-size:13px;min-height:38px;padding:8px 12px}
+body.pages-in-header .app-header>.model-pages button[aria-selected=true]{background:#204a91;color:#fff;border-color:#204a91}
+body.pages-in-header .app-header>#modelPages #edNewPage{flex:none;white-space:nowrap;font-size:13px;min-height:38px;padding:8px 12px;margin:0}
+body.pages-in-header .shell{height:calc(100dvh - var(--org-header-height,66px))}
+body.pages-in-header.full-edit .app-header{display:flex;position:fixed;inset:0 0 auto;z-index:25}
+body.pages-in-header.full-edit .shell{top:var(--org-header-height,66px);height:calc(100dvh - var(--org-header-height,66px));min-height:0}
+@media(max-width:1100px){body.pages-in-header .app-header{gap:12px;padding:8px 12px}body.pages-in-header .app-header .sese-logo{width:90px}body.pages-in-header .app-header .brand-copy{padding-left:10px}body.pages-in-header .app-header .brand-name{font-size:16px}body.pages-in-header .app-header .brand-label{font-size:10px}}
+@media(max-width:650px){body.pages-in-header .app-header{flex-wrap:wrap;gap:6px}body.pages-in-header .app-header>.model-pages{flex-basis:100%;width:100%;gap:6px}body.pages-in-header .app-header>.model-pages .model-tabs{flex:1}body.pages-in-header .app-header .sese-logo{width:72px}body.pages-in-header .app-header>.model-pages .model-tabs button,body.pages-in-header .app-header>#modelPages #edNewPage{font-size:12px;padding:6px 9px;min-height:34px}}
+@media print{body.pages-in-header .app-header{display:none!important}}
+</style>
+<script id="header-pages-script">/* Reutiliza os controles originais no cabeçalho, preservando suas ações. */
+(function(){
+ const header=document.querySelector('.app-header'),brand=header?.querySelector('.brand'),pages=$('modelPages');if(!header||!brand||!pages)return;
+ document.body.classList.add('pages-in-header');brand.after(pages);
+ function measureHeader(){document.documentElement.style.setProperty('--org-header-height',Math.ceil(header.getBoundingClientRect().height)+'px');}
+ if(typeof ResizeObserver==='function')new ResizeObserver(measureHeader).observe(header);window.addEventListener('resize',measureHeader);measureHeader();
+ let active=edNow();const previous=modelPageControls;
+ modelPageControls=function(){const scroll=pages.querySelector('.model-tabs')?.scrollLeft||0;previous();const tabs=pages.querySelector('.model-tabs');if(tabs)tabs.scrollLeft=scroll;if(active!==edNow()){active=edNow();tabs?.querySelector('[aria-selected="true"]')?.scrollIntoView({block:'nearest',inline:'nearest'});}measureHeader();};
+ modelPageControls();
+})();
+</script>
+</body>
 </html>
