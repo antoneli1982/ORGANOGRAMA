@@ -1532,7 +1532,7 @@ function modelScene(page=project.activePage||0,opts={title:true,logo:true}){
  }
  scene.push(...footerLayout(page,dims.width,modelFooterY(page)).scene);return {scene,...dims};
 }
-function modelSvg(page=project.activePage||0,editable=false,opts={title:true,logo:true}){const {scene,width,height}=modelScene(page,opts);let svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+width+'" height="'+height+'" viewBox="0 0 '+width+' '+height+'">';if(!opts.transparent)svg+='<rect width="100%" height="100%" fill="'+project.style.background+'"/>';
+function modelSvg(page=project.activePage||0,editable=false,opts={title:true,logo:true}){const {scene,width,height}=opts.sceneData||modelScene(page,opts);let svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+width+'" height="'+height+'" viewBox="0 0 '+width+' '+height+'">';if(!opts.transparent)svg+='<rect width="100%" height="100%" fill="'+project.style.background+'"/>';
  scene.forEach((a,i)=>{let body='',key=a.key||'';if(a.type==='rect')body='<rect x="'+a.x+'" y="'+a.y+'" width="'+a.w+'" height="'+a.h+'" rx="'+a.r+'" fill="'+a.color+'"/>';else if(a.type==='ellipse')body='<ellipse cx="'+(a.x+a.w/2)+'" cy="'+(a.y+a.h/2)+'" rx="'+a.w/2+'" ry="'+a.h/2+'" fill="'+a.color+'"/>';else if(a.type==='line')body='<line x1="'+a.x1+'" y1="'+a.y1+'" x2="'+a.x2+'" y2="'+a.y2+'" stroke="'+a.color+'" stroke-width="'+a.width+'"/>';else if(a.type==='text')body='<text x="'+(a.x+a.w/2)+'" y="'+(a.y+a.size*.82)+'" text-anchor="middle" fill="'+a.color+'" font-size="'+a.size+'" font-weight="'+(a.bold?700:400)+'" font-family="'+esc(a.font)+'">'+esc(a.text)+'</text>';else if(a.type==='image'){if(a.ellipse)body='<defs><clipPath id="mp'+page+'_'+i+'"><ellipse cx="'+(a.x+a.w/2)+'" cy="'+(a.y+a.h/2)+'" rx="'+a.w/2+'" ry="'+a.h/2+'"/></clipPath></defs>';body+='<image href="'+a.src+'" x="'+a.x+'" y="'+a.y+'" width="'+a.w+'" height="'+a.h+'" preserveAspectRatio="'+(a.ellipse?'xMidYMid slice':'xMidYMid meet')+'"'+(a.ellipse?' clip-path="url(#mp'+page+'_'+i+')"':'')+'/>'}svg+=body;});
  if(editable)for(const n of modelNodes(page))svg+='<rect class="person-card model-card-hit" data-person="'+n.id+'" tabindex="0" role="button" aria-label="Editar '+esc(n.name)+'" x="'+n.x+'" y="'+n.y+'" width="'+n.w+'" height="'+n.h+'" rx="'+n.h/2+'" fill="transparent" stroke="'+(n.id===selected?'#052c58':'transparent')+'" stroke-width="2.5"/>';
  return {svg:svg+'</svg>',width,height};}
@@ -1801,10 +1801,10 @@ edInstall();
 </script>
 <script id="sese-print-script">/* Impressão em papel ISO A. As medidas internas de encaixe são em milímetros. */
 const PRINT_PAPERS={A0:[841,1189],A1:[594,841],A2:[420,594],A3:[297,420],A4:[210,297],A5:[148,210]};
-const PRINT_DEFAULT={paper:'A3',orientation:'landscape',margin:10,allPages:true,title:true,logo:true,keepData:true,smart:true};
+const PRINT_DEFAULT={paper:'A3',orientation:'landscape',margin:5,allPages:true,title:true,logo:true,keepData:true,smart:true};
 let printSettings={...PRINT_DEFAULT};
 try{printSettings=printNormalize(JSON.parse(localStorage.getItem('organograma-print-v1')||'null')||{})}catch(e){}
-function printNormalize(raw={}){const v={...PRINT_DEFAULT,...raw};return {smart:v.smart!==false,paper:PRINT_PAPERS[v.paper]?v.paper:'A3',orientation:v.orientation==='portrait'?'portrait':'landscape',margin:Number.isFinite(Number(v.margin))?Math.max(0,Math.min(50,Number(v.margin))):10,allPages:v.allPages!==false,title:v.title!==false,logo:v.logo!==false,keepData:v.keepData!==false}}
+function printNormalize(raw={}){const v={...PRINT_DEFAULT,...raw};return {layoutVersion:2,smart:v.smart!==false,paper:PRINT_PAPERS[v.paper]?v.paper:'A3',orientation:v.orientation==='portrait'?'portrait':'landscape',margin:Number.isFinite(Number(v.margin))?Math.max(0,Math.min(50,raw.layoutVersion!==2&&Number(v.margin)===10?5:Number(v.margin))):5,allPages:v.allPages!==false,title:v.title!==false,logo:v.logo!==false,keepData:v.keepData!==false}}
 function printPaper(o=printSettings){const v=printNormalize(o),[short,long]=PRINT_PAPERS[v.paper];return {...v,width:v.orientation==='landscape'?long:short,height:v.orientation==='landscape'?short:long}}
 
 function printBounds(data){
@@ -1818,16 +1818,97 @@ function printBounds(data){
  }
  return Number.isFinite(left)?{x:left-4,y:top-4,width:Math.max(1,right-left+8),height:Math.max(1,bottom-top+8)}:{x:0,y:0,width:data.width,height:data.height};
 }
-function printScene(index,o){const data=modelScene(index,o);if(!o.smart)return data;const b=printBounds(data);return {width:b.width,height:b.height,scene:data.scene.map(a=>a.type==='line'?{...a,x1:a.x1-b.x,x2:a.x2-b.x,y1:a.y1-b.y,y2:a.y2-b.y}:{...a,x:a.x-b.x,y:a.y-b.y})}}
+/* Montagem exclusiva da impressão. O documento editável nunca é reposicionado. */
+const SMART_PRINT_CACHE={key:'',data:null};
+function smartPrintTransform(scene,scale=1,dx=0,dy=0){return scene.map(a=>a.type==='line'?{...a,x1:a.x1*scale+dx,x2:a.x2*scale+dx,y1:a.y1*scale+dy,y2:a.y2*scale+dy,width:a.width*scale}:{...a,x:a.x*scale+dx,y:a.y*scale+dy,w:a.w*scale,...(Number.isFinite(a.h)?{h:a.h*scale}:{}),...(Number.isFinite(a.r)?{r:a.r*scale}:{}),...(Number.isFinite(a.size)?{size:a.size*scale}:{})});}
+function smartPrintInDocument(doc,fn){const original=project;project=doc;try{return fn();}finally{project=original;}}
+function smartPrintBody(doc,index){return smartPrintInDocument(doc,()=>{const data=modelScene(index,{title:false,logo:false});data.scene=data.scene.filter(a=>!String(a.key||'').startsWith('footer'));const bounds=printBounds(data);return {...bounds,scene:smartPrintTransform(data.scene,1,-bounds.x,-bounds.y)};});}
+function smartPrintPack(entries,columns){
+ if(!entries.length)return {positions:[],width:0,height:0};
+ const map=new Map(entries.map(e=>[e.ref,e])),memo=new Map(),active=new Set();
+ function depth(ref){if(memo.has(ref))return memo.get(ref);if(active.has(ref))throw Error('Revise as conexões circulares antes de imprimir.');active.add(ref);const parents=edParents(map.get(ref)).filter(r=>map.has(r));const d=parents.length?1+Math.max(...parents.map(depth)):0;active.delete(ref);memo.set(ref,d);return d;}
+ const levels=new Map();for(const e of entries){const d=depth(e.ref);if(!levels.has(d))levels.set(d,[]);levels.get(d).push(e);}
+ const count=Math.min(columns,Math.max(...[...levels.values()].map(list=>list.length))),cell=Math.max(...entries.map(e=>e.item.w)),gap=30,pad=24,width=count*cell+(count-1)*gap+pad*2,positions=[];let y=16;
+ for(const [,items] of [...levels.entries()].sort((a,b)=>a[0]-b[0])){
+  items.sort((a,b)=>a.item.x-b.item.x||a.item.y-b.item.y||a.ref.localeCompare(b.ref));
+  for(let i=0;i<items.length;i+=count){const row=items.slice(i,i+count),rowWidth=row.length*cell+(row.length-1)*gap,height=Math.max(...row.map(e=>e.item.h));
+   row.forEach((e,j)=>positions.push({ref:e.ref,x:(width-rowWidth)/2+j*(cell+gap)+(cell-e.item.w)/2,y}));y+=height+34;
+  }
+ }
+ return {positions,width,height:y-18};
+}
+function smartPrintGroups(doc,index){
+ const entries=edEntries(index,doc),map=new Map(entries.map(e=>[e.ref,e])),spine=new Set();
+ function ancestors(ref){for(const r of edParents(map.get(ref)).filter(r=>map.has(r)))if(!spine.has(r)){spine.add(r);ancestors(r);}}
+ for(const e of entries)if(e.kind==='group')ancestors(e.ref);
+ const clusters=new Map(entries.filter(e=>e.kind==='group'&&!spine.has(e.ref)).map(e=>[e.ref,[e]]));
+ function nearestGroup(ref){const queue=[...edParents(map.get(ref))],seen=new Set();for(let i=0;i<queue.length;i++){const r=queue[i];if(seen.has(r)||!map.has(r))continue;seen.add(r);if(clusters.has(r))return r;queue.push(...edParents(map.get(r)));}return '';}
+ for(const e of entries){if(e.kind==='group'||spine.has(e.ref))continue;const assigned='g:'+e.item.groupId,key=clusters.has(assigned)?assigned:nearestGroup(e.ref)||'unassigned';if(!clusters.has(key))clusters.set(key,[]);clusters.get(key).push(e);}
+ const blocks=[...clusters.values()].sort((a,b)=>Math.min(...a.map(e=>e.item.x))-Math.min(...b.map(e=>e.item.x)));
+ return {spine:entries.filter(e=>spine.has(e.ref)),blocks};
+}
+function smartPrintLayout(doc,index,groups,columns,innerColumns){
+ const blocks=groups.blocks.map(entries=>smartPrintPack(entries,innerColumns)),top=smartPrintPack(groups.spine,Math.max(1,columns*innerColumns)),gap=48;
+ const rows=[];for(let i=0;i<blocks.length;i+=columns)rows.push(blocks.slice(i,i+columns));
+ const width=Math.max(top.width,...rows.map(row=>row.reduce((sum,b)=>sum+b.width,0)+Math.max(0,row.length-1)*gap),1),positions=[];
+ for(const p of top.positions)positions.push({...p,x:p.x+(width-top.width)/2});
+ let y=top.height?top.height+56:0;
+ for(const row of rows){const rowWidth=row.reduce((sum,b)=>sum+b.width,0)+(row.length-1)*gap;let x=(width-rowWidth)/2;
+  for(const block of row){for(const p of block.positions)positions.push({...p,x:p.x+x,y:p.y+y});x+=block.width+gap;}y+=Math.max(...row.map(b=>b.height))+gap;
+ }
+ const copy=clone(doc),byRef=new Map(edEntries(index,copy).map(e=>[e.ref,e.item]));for(const p of positions){const n=byRef.get(p.ref);n.x=p.x;n.y=p.y;}
+ // Os pontos de conexão personalizados se aplicam ao desenho manual; o impresso usa novas rotas.
+ copy.connectionSettings={};return copy;
+}
+function smartPrintBands(doc,index,o,orientation){
+ const paper=printPaper({...o,orientation}),width=paper.width-2*paper.margin,height=paper.height-2*paper.margin,font=FONTS[doc.style.font].css,header=[];
+ const logo=smartPrintInDocument(doc,()=>orgLogo()),showLogo=o.logo!==false,logoW=showLogo?Math.min(27,width*.16):0,logoH=showLogo?logoW*logo.height/logo.width:0,titleX=showLogo?logoW+5:0;
+ const size=3.8,titleLines=o.title!==false?wrapText(doc.pages[index].title,Math.max(10,width-titleX),size,700,font):[],headerHeight=Math.max(logoH,titleLines.length*size*1.18);
+ if(showLogo)header.push({type:'image',src:logo.src,x:0,y:0,w:logoW,h:logoH});
+ titleLines.forEach((text,i)=>header.push({type:'text',text,x:titleX,y:i*size*1.18,w:width-titleX,size,font,color:'#243f84',bold:true,key:'print-title'}));
+ let footerScale=2.3/14;const footer=smartPrintInDocument(doc,()=>footerLayout(index,width/footerScale+230,0).scene),bounds=printBounds({scene:footer,width:1,height:1});footerScale=Math.min(footerScale,width/bounds.width);
+ const footerHeight=bounds.height*footerScale,footerScene=smartPrintTransform(footer,footerScale,-bounds.x*footerScale,height-footerHeight-bounds.y*footerScale);
+ const chartY=headerHeight+(headerHeight?4:0),chartHeight=Math.max(1,height-chartY-footerHeight-4);
+ return {paper,width,height,header,footer:footerScene,chartY,chartHeight};
+}
+function smartPrintBuild(index,options){
+ const o=printNormalize(options),key=JSON.stringify([project,index,o]);if(SMART_PRINT_CACHE.key===key)return SMART_PRINT_CACHE.data;
+ const doc=clone(project),groups=smartPrintGroups(doc,index),original=smartPrintBody(doc,index),candidates=[{body:original,reflow:false,layoutDoc:doc}];
+ for(let columns=1;columns<=Math.min(6,Math.max(1,groups.blocks.length));columns++)for(const inner of [1,2,3]){
+  const arranged=smartPrintLayout(doc,index,groups,columns,inner),body=smartPrintBody(arranged,index);candidates.push({body,reflow:true,columns,inner,layoutDoc:arranged});
+ }
+ let best=null;
+ for(const orientation of ['portrait','landscape']){
+  const bands=smartPrintBands(doc,index,o,orientation);
+  for(const c of candidates){const scale=Math.min(bands.width/c.body.width,bands.chartHeight/c.body.height),occupancy=(c.body.width*scale/bands.width)*(c.body.height*scale/bands.chartHeight),score=scale*(.92+.08*occupancy);
+   if(!best||score>best.score+1e-9)best={...c,bands,scale,occupancy,score};
+  }
+ }
+ // Ocupa também o eixo que sobrou, ampliando os espaços entre cartões sem deformá-los.
+ if(best.occupancy<.99){
+  const axis=best.bands.width/best.body.width<best.bands.chartHeight/best.body.height?'y':'x',size=axis==='x'?'w':'h',dimension=axis==='x'?'width':'height',entries=edEntries(index,best.layoutDoc),centers=entries.map(e=>e.item[axis]+e.item[size]/2),min=Math.min(...centers),span=Math.max(...centers)-min,target=(axis==='x'?best.bands.width:best.bands.chartHeight)/best.scale;
+  if(span>1){let low=1,high=1+(target-best.body[dimension]+100)*2/span,expanded=best;
+   for(let attempt=0;attempt<8;attempt++){const factor=(low+high)/2,copy=clone(best.layoutDoc);for(const {item} of edEntries(index,copy))item[axis]+=(item[axis]+item[size]/2-min)*(factor-1);
+    const body=smartPrintBody(copy,index),scale=Math.min(best.bands.width/body.width,best.bands.chartHeight/body.height),occupancy=body.width*scale/best.bands.width*body.height*scale/best.bands.chartHeight;
+    if(body[dimension]<=target&&scale>=best.scale*.999999){low=factor;if(occupancy>expanded.occupancy)expanded={...best,body,scale,occupancy};}else high=factor;
+   }best=expanded;
+  }
+ }
+ const {body,bands,scale}=best,dx=(bands.width-body.width*scale)/2,dy=bands.chartY+(bands.chartHeight-body.height*scale)/2;
+ const data={width:bands.width,height:bands.height,scene:[...bands.header,...smartPrintTransform(body.scene,scale,dx,dy),...bands.footer],printMeta:{orientation:bands.paper.orientation,graphOccupancy:Math.round(best.occupancy*100),reflow:best.reflow,columns:best.columns||0}};
+ SMART_PRINT_CACHE.key=key;SMART_PRINT_CACHE.data=data;return data;
+}
+
+function printScene(index,o){if(o.smart)return smartPrintBuild(index,o);const data=modelScene(index,o);if(!o.smart)return data;const b=printBounds(data);return {width:b.width,height:b.height,scene:data.scene.map(a=>a.type==='line'?{...a,x1:a.x1-b.x,x2:a.x2-b.x,y1:a.y1-b.y,y2:a.y2-b.y}:{...a,x:a.x-b.x,y:a.y-b.y})}}
 function printOrientation(w,h,o){const v=printNormalize(o);if(!v.smart)return v.orientation;const [short,long]=PRINT_PAPERS[v.paper],portrait=Math.min((short-2*v.margin)/w,(long-2*v.margin)/h),landscape=Math.min((long-2*v.margin)/w,(short-2*v.margin)/h);return Math.abs(portrait-landscape)<1e-9?v.orientation:portrait>landscape?'portrait':'landscape'}
-function printQuality(index,o,f){let message=o.smart?'Impressão inteligente · orientação automática · conteúdo centralizado':'Ajuste manual';if(isModel()){const sizes=modelScene(index,o).scene.filter(a=>a.type==='text'&&String(a.key||'').startsWith('org-name-')).map(a=>a.size*f.scale*72/25.4);if(sizes.length){const points=Math.min(...sizes);message+=' · Menor nome: '+points.toLocaleString('pt-BR',{maximumFractionDigits:1})+' pt';if(points<8)message+=' · Escolha um papel maior para ampliar os nomes'}}return message}
+function printQuality(index,o,f){let message=o.smart?'Ocupação máxima da folha':'Ajuste manual';if(isModel()){const data=o.smart?smartPrintBuild(index,o):modelScene(index,o);const sizes=data.scene.filter(a=>a.type==='text'&&String(a.key||'').startsWith('org-name-')).map(a=>a.size*f.scale*72/25.4);if(o.smart&&data.printMeta)message+=' · Área do organograma: '+data.printMeta.graphOccupancy+'%';if(sizes.length){const points=Math.min(...sizes);message+=' · Menor nome: '+points.toLocaleString('pt-BR',{maximumFractionDigits:1})+' pt';if(points<8)message+=' · Um papel maior amplia os nomes'}}return message}
 
 function printFit(w,h,o=printSettings){const v=printNormalize(o),p=printPaper({...v,orientation:printOrientation(w,h,v)}),scale=Math.min((p.width-2*p.margin)/w,(p.height-2*p.margin)/h);return {...p,dpi:v.smart?600:300,scale,x:(p.width-w*scale)/2,y:(p.height-h*scale)/2,w:w*scale,h:h*scale}}
 function printPages(o){return isModel()?modelExportPages(o):[0]}
-function printSource(index,o){const source=isModel()?modelSvg(index,false,{...o,transparent:false}):exportSVG({...o,transparent:false});if(!o.smart||!isModel())return source;const b=printBounds(modelScene(index,o));let svg=source.svg.replace(/^<svg\b[^>]*>/,'<svg xmlns="http://www.w3.org/2000/svg" width="'+b.width+'" height="'+b.height+'" viewBox="'+b.x+' '+b.y+' '+b.width+' '+b.height+'">');svg=svg.replace(/<rect width="100%" height="100%" fill="[^"]*"\/>/,'<rect x="'+b.x+'" y="'+b.y+'" width="'+b.width+'" height="'+b.height+'" fill="'+project.style.background+'"/>');return {svg,width:b.width,height:b.height}}
+function printSource(index,o){if(o.smart&&isModel())return modelSvg(index,false,{...o,transparent:false,sceneData:smartPrintBuild(index,o)});const source=isModel()?modelSvg(index,false,{...o,transparent:false}):exportSVG({...o,transparent:false});if(!o.smart||!isModel())return source;const b=printBounds(modelScene(index,o));let svg=source.svg.replace(/^<svg\b[^>]*>/,'<svg xmlns="http://www.w3.org/2000/svg" width="'+b.width+'" height="'+b.height+'" viewBox="'+b.x+' '+b.y+' '+b.width+' '+b.height+'">');svg=svg.replace(/<rect width="100%" height="100%" fill="[^"]*"\/>/,'<rect x="'+b.x+'" y="'+b.y+'" width="'+b.width+'" height="'+b.height+'" fill="'+project.style.background+'"/>');return {svg,width:b.width,height:b.height}}
 function printSave(){try{localStorage.setItem('organograma-print-v1',JSON.stringify(printSettings))}catch(e){}}
 function printRead(prefix='print'){const v=printNormalize({...printSettings,paper:$(prefix+'Paper').value,orientation:$(prefix+'Orientation').value,margin:$(prefix+'Margin').value,smart:$(prefix+'Smart').checked});if(prefix==='print')for(const [k,suffix] of [['allPages','AllPages'],['title','Title'],['logo','Logo'],['keepData','KeepData']])v[k]=$(prefix+suffix).checked;printSettings=v;$(prefix+'Margin').value=v.margin;printSave();return v}
-function printControls(prefix){return '<label class="check-row smart-print-control"><input type="checkbox" id="'+prefix+'Smart" checked><strong>Impressão inteligente</strong></label><p class="help">Escolhe a melhor orientação para cada página, reduz as bordas vazias e amplia o conteúdo sem cortes. Impressão com texto e linhas vetoriais; PDF com linhas vetoriais e textos até 600 dpi. As fotos usam a resolução disponível.</p><div class="two-cols"><label class="field"><span>Tamanho do papel</span><select id="'+prefix+'Paper">'+Object.entries(PRINT_PAPERS).map(([k,a])=>'<option value="'+k+'">'+k+' · '+a.join(' × ')+' mm</option>').join('')+'</select></label><label class="field"><span>Orientação</span><select id="'+prefix+'Orientation"><option value="landscape">Paisagem</option><option value="portrait">Retrato</option></select></label></div><label class="field print-margin"><span>Margens (mm)</span><input type="number" min="0" max="50" step="1" id="'+prefix+'Margin"><small>Aplicadas nos quatro lados. O organograma inteiro é centralizado e ajustado à área disponível.</small></label>'}
+function printControls(prefix){return '<label class="check-row smart-print-control"><input type="checkbox" id="'+prefix+'Smart" checked><strong>Impressão inteligente</strong></label><p class="help">Aproveita a largura e a altura da folha: escolhe a orientação, distribui os departamentos e amplia os cartões. Mantém fotos, textos e conexões proporcionais. A reorganização vale apenas para a impressão e o PDF.</p><div class="two-cols"><label class="field"><span>Tamanho do papel</span><select id="'+prefix+'Paper">'+Object.entries(PRINT_PAPERS).map(([k,a])=>'<option value="'+k+'">'+k+' · '+a.join(' × ')+' mm</option>').join('')+'</select></label><label class="field"><span>Orientação</span><select id="'+prefix+'Orientation"><option value="landscape">Paisagem</option><option value="portrait">Retrato</option></select></label></div><label class="field print-margin"><span>Margens (mm)</span><input type="number" min="0" max="50" step="1" id="'+prefix+'Margin"><small>Use 5 mm para maior aproveitamento. Reduza mais somente se sua impressora aceitar. As margens valem nos quatro lados.</small></label>'}
 function printFill(prefix){$(prefix+'Paper').value=printSettings.paper;$(prefix+'Orientation').value=printSettings.orientation;$(prefix+'Margin').value=printSettings.margin;$(prefix+'Smart').checked=printSettings.smart;$(prefix+'Orientation').disabled=printSettings.smart}
 function printPaperPreview(source,o){const f=printFit(source.width,source.height,o);return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+f.width+' '+f.height+'" role="img" aria-label="Prévia do organograma na folha '+f.paper+'"><rect width="100%" height="100%" fill="white"/><rect x="'+f.margin+'" y="'+f.margin+'" width="'+(f.width-2*f.margin)+'" height="'+(f.height-2*f.margin)+'" fill="none" stroke="#98abc6" stroke-width="'+(f.width/1000)+'" stroke-dasharray="'+(f.width/180)+'"/>'+source.svg.replace('<svg ','<svg x="'+f.x+'" y="'+f.y+'" ').replace(/width="[^"]+" height="[^"]+"/,'width="'+f.w+'" height="'+f.h+'"')+'</svg>'}
 function printRefresh(){const o=printRead(),indices=printPages(o),index=indices[Number($('printPreviewPage').value)]??indices[0],source=printSource(index,o),f=printFit(source.width,source.height,o);$('printOrientation').disabled=o.smart;$('printPreview').innerHTML=printPaperPreview(source,o);$('printInfo').textContent=f.paper+' · '+f.width+' × '+f.height+' mm · '+(f.orientation==='landscape'?'Paisagem':'Retrato')+' · '+indices.length+' folha'+(indices.length>1?'s':'')+' · '+printQuality(index,o,f);$('printAllPagesRow').hidden=!isModel();$('printPreviewPage').innerHTML=indices.map((i,n)=>'<option value="'+n+'" '+(i===index?'selected':'')+'>'+esc(isModel()?project.pages[i].label:'Organograma')+'</option>').join('');$('printPreviewPageRow').hidden=indices.length<2;}
@@ -1847,7 +1928,7 @@ const printPreviousInfo=ioExportInfo;
 ioExportPDF=o=>printPDF({...printSettings,...o});
 ioExportInfo=function(){printPreviousInfo();if(!$('exportPaperSettings'))return;const isPDF=$('exportFormat').value==='pdf';$('exportPaperSettings').hidden=!isPDF;if(isPDF){const o={...printSettings,...ioOptions()},index=project.activePage||0,source=printSource(index,o),f=printFit(source.width,source.height,o);$('exportPrintOrientation').disabled=o.smart;$('exportScale').disabled=true;$('exportPreview').innerHTML=printPaperPreview(source,o);$('exportDimensions').textContent=f.paper+' · '+f.width+' × '+f.height+' mm · '+(f.orientation==='landscape'?'Paisagem':'Retrato')+' · '+printPages(o).length+' folha(s) · '+printQuality(index,o,f)}};
 function printInstall(){const btn=document.createElement('button');btn.id='printBtn';btn.title='Imprimir em A0, A1, A2, A3, A4 ou A5';btn.innerHTML='<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8V3h12v5M6 17H3V8h18v9h-3M6 14h12v7H6zM17 11h1"/></svg><span>Imprimir</span>';$('exportBtn').before(btn);btn.onclick=printOpen;
- const dialog=document.createElement('dialog');dialog.id='printDialog';dialog.setAttribute('aria-labelledby','printHeading');dialog.innerHTML='<div class="dialog-body"><div class="dialog-head"><h2 id="printHeading">Imprimir organograma</h2><button class="icon ghost" id="printClose" aria-label="Fechar">×</button></div><p>Escolha a folha. As proporções e todo o conteúdo da página serão preservados.</p><div class="print-layout"><div>'+printControls('print')+'<label class="check-row" id="printAllPagesRow"><input type="checkbox" id="printAllPages" checked>Todas as páginas</label><label class="check-row"><input type="checkbox" id="printTitle" checked>Incluir título</label><label class="check-row"><input type="checkbox" id="printLogo" checked>Incluir logo Sesé</label><label class="check-row"><input type="checkbox" id="printKeepData" checked>PDF com dados para reimportar</label></div><div class="print-preview-side"><div id="printPreview" class="print-preview"></div><label class="field" id="printPreviewPageRow"><span>Página da prévia</span><select id="printPreviewPage"></select></label><p class="help">A linha pontilhada indica as margens e não aparece na impressão.</p></div></div><div id="printInfo" class="export-dimensions"></div><p class="print-instructions">Na janela de impressão, use o papel escolhido, escala 100% e desative cabeçalhos e rodapés. Confira a orientação indicada na prévia. Para páginas com orientações diferentes ou para levar à gráfica, use Baixar PDF.</p><div id="printBusy" role="status" aria-live="polite" hidden>Preparando o organograma…</div></div><div class="dialog-foot"><button id="printDownload">Baixar PDF</button><button class="primary" id="printConfirm">Imprimir</button></div>';
+ const dialog=document.createElement('dialog');dialog.id='printDialog';dialog.setAttribute('aria-labelledby','printHeading');dialog.innerHTML='<div class="dialog-body"><div class="dialog-head"><h2 id="printHeading">Imprimir organograma</h2><button class="icon ghost" id="printClose" aria-label="Fechar">×</button></div><p>Escolha a folha e confira a prévia. O modo inteligente amplia os cartões sem modificar a posição deles no editor.</p><div class="print-layout"><div>'+printControls('print')+'<label class="check-row" id="printAllPagesRow"><input type="checkbox" id="printAllPages" checked>Todas as páginas</label><label class="check-row"><input type="checkbox" id="printTitle" checked>Incluir título</label><label class="check-row"><input type="checkbox" id="printLogo" checked>Incluir logo Sesé</label><label class="check-row"><input type="checkbox" id="printKeepData" checked>PDF com dados para reimportar</label></div><div class="print-preview-side"><div id="printPreview" class="print-preview"></div><label class="field" id="printPreviewPageRow"><span>Página da prévia</span><select id="printPreviewPage"></select></label><p class="help">A linha pontilhada indica as margens e não aparece na impressão.</p></div></div><div id="printInfo" class="export-dimensions"></div><p class="print-instructions">Na janela de impressão, use o papel escolhido, escala 100% e desative cabeçalhos e rodapés. Confira a orientação indicada na prévia. Para páginas com orientações diferentes ou para levar à gráfica, use Baixar PDF.</p><div id="printBusy" role="status" aria-live="polite" hidden>Preparando o organograma…</div></div><div class="dialog-foot"><button id="printDownload">Baixar PDF</button><button class="primary" id="printConfirm">Imprimir</button></div>';
  document.body.append(dialog);$('printClose').onclick=()=>dialog.close();$('printConfirm').onclick=printNative;$('printDownload').onclick=printDownload;for(const id of ['Smart','Paper','Orientation','Margin','AllPages','Title','Logo','KeepData','PreviewPage'])$('print'+id).onchange=printRefresh;
  const settings=document.createElement('div');settings.id='exportPaperSettings';settings.hidden=true;settings.innerHTML=printControls('exportPrint');$('exportFormat').closest('.two-cols').after(settings);printFill('exportPrint');for(const k of ['Smart','Paper','Orientation','Margin'])$('exportPrint'+k).onchange=()=>{printRead('exportPrint');ioExportInfo()};$('exportBtn').onclick=()=>{printFill('exportPrint');ioExportInfo();$('exportDialog').showModal()};for(const id of ['exportFormat','exportScale','transparentExport','includeTitle','includeLogo','keepEditData','exportAllPages'])if($(id))$(id).onchange=ioExportInfo;
  document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='p'){e.preventDefault();if(!$('printDialog').open&&!document.querySelector('dialog[open]'))printOpen()}});
@@ -2394,5 +2475,103 @@ const departmentToolbarBase=edToolbar;edToolbar=function(){departmentToolbarBase
 const departmentUpgradeBase=edUpgrade;edUpgrade=function(doc){departmentUpgradeBase(doc);if(doc.template==='sese-r15'&&doc.departmentVersion===1)for(const n of doc.people)n.department=n.group||'';return doc;};
 renderAll();
 
+</script><style>#printDialog{width:1100px}.print-layout{grid-template-columns:minmax(260px,.75fr) minmax(0,1.4fr)}#printPreview{height:min(56vh,540px);padding:12px}#printPreview>svg{width:100%;height:100%}@media(max-width:700px){.print-layout{grid-template-columns:1fr}#printPreview{height:340px}}</style><style id="select-align-style">
+#selectionAlignBar{flex:none;padding:10px 14px;border-bottom:1px solid var(--border);background:#f4f7ff;color:var(--ink);position:relative;z-index:5;max-height:40vh;overflow:auto}
+#selectionAlignBar .sa-selection,#selectionAlignBar .sa-actions{display:flex;align-items:center;flex-wrap:wrap;gap:7px}
+#selectionAlignBar .sa-actions{margin-top:8px}#selectionAlignBar button{font-size:13px;min-height:34px;padding:6px 10px}#saCount{font-size:14px;margin-right:8px}#selectionAlignBar p{font-size:12px;line-height:1.5;color:var(--muted);margin:8px 0 0}
+#selectionAlignBar label{display:flex;align-items:center;gap:6px;font-size:13px}#saGap{width:66px;min-height:34px;padding:5px;border:1px solid var(--border);border-radius:6px}.sa-more{font-size:13px}.sa-more summary{cursor:pointer;padding:8px;min-height:34px}.sa-more[open]{flex-basis:100%}.sa-more>div{display:flex;gap:6px;flex-wrap:wrap;padding:5px 0}
+#saToggle[aria-pressed=true]{background:#204a91;border-color:#204a91;color:#fff}#saMarquee{position:absolute;pointer-events:none;border:2px solid #2563eb;background:#2563eb20;z-index:6}.select-align-active,.select-align-active .person-card{cursor:crosshair!important}
+.org-dark #selectionAlignBar{background:#1b2a42}.org-dark #saMarquee{border-color:#7fb0ff;background:#7fb0ff22}
+@media(max-width:700px){#selectionAlignBar{padding:8px;max-height:32vh}#selectionAlignBar button{font-size:12px}#saCount{flex-basis:100%}.sa-selection>button{flex:1 1 40%}#selectionAlignBar p{font-size:12px}}
+</style><script id="select-align-script">
+/* Seleção direta no organograma e alinhamento exclusivo dos elementos marcados. */
+const SELECT_ALIGN={enabled:false,drag:null,page:null,frame:0};
+function saPoint(clientX,clientY,rect,transform){return {x:(clientX-rect.left-transform.x)/transform.scale,y:(clientY-rect.top-transform.y)/transform.scale};}
+function saRectRefs(entries,start,end){const left=Math.min(start.x,end.x),right=Math.max(start.x,end.x),top=Math.min(start.y,end.y),bottom=Math.max(start.y,end.y);return entries.filter(e=>{const n=e.item,x=n.x-(e.kind==='group'?12:0),w=n.w+(e.kind==='group'?12:0);return x<right&&x+w>left&&n.y<bottom&&n.y+n.h>top;}).map(e=>e.ref);}
+function saPlan(doc,page,refs,action,gap=30){
+ const chosen=new Set(refs),entries=edEntries(page,doc).filter(e=>chosen.has(e.ref));
+ if(entries.length<2)throw Error('Selecione pelo menos dois cartões ou departamentos.');
+ const allowed=['auto','row','column','left','centerX','right','top','centerY','bottom','distX','distY'];if(!allowed.includes(action))throw Error('Escolha um alinhamento válido.');
+ gap=Number.isFinite(Number(gap))?Math.max(0,Math.min(500,Number(gap))):30;
+ const nodes=entries.map(e=>({ref:e.ref,x:e.item.x,y:e.item.y,w:e.item.w,h:e.item.h})),left=Math.min(...nodes.map(n=>n.x)),right=Math.max(...nodes.map(n=>n.x+n.w)),top=Math.min(...nodes.map(n=>n.y)),bottom=Math.max(...nodes.map(n=>n.y+n.h));
+ if(action==='auto'){const w=nodes.reduce((s,n)=>s+n.w,0)/nodes.length,h=nodes.reduce((s,n)=>s+n.h,0)/nodes.length;action=(right-left)/w>=(bottom-top)/h?'row':'column';}
+ if(action==='row'||action==='column'){
+  const axis=action==='row'?'x':'y',size=axis==='x'?'w':'h',other=axis==='x'?'y':'x',otherSize=axis==='x'?'h':'w';
+  nodes.sort((a,b)=>a[axis]-b[axis]||a[other]-b[other]||a.ref.localeCompare(b.ref));let pos=axis==='x'?left:top;
+  const center=nodes.reduce((s,n)=>s+n[other]+n[otherSize]/2,0)/nodes.length;
+  for(const n of nodes){n[axis]=pos;n[other]=center-n[otherSize]/2;pos+=n[size]+gap;}
+ }else if(action==='distX'||action==='distY'){
+  if(nodes.length<3)throw Error('Selecione pelo menos três elementos para distribuir.');
+  const axis=action==='distX'?'x':'y',size=axis==='x'?'w':'h';nodes.sort((a,b)=>a[axis]-b[axis]||a.ref.localeCompare(b.ref));
+  const start=nodes[0][axis],end=nodes.at(-1)[axis]+nodes.at(-1)[size],space=(end-start-nodes.reduce((s,n)=>s+n[size],0))/(nodes.length-1);
+  if(space<0)throw Error('Não há espaço entre as extremidades. Use Em linha ou Em coluna para separar os elementos.');
+  let pos=start;for(const n of nodes){n[axis]=pos;pos+=n[size]+space;}
+ }else for(const n of nodes){if(action==='left')n.x=left;if(action==='right')n.x=right-n.w;if(action==='centerX')n.x=(left+right-n.w)/2;if(action==='top')n.y=top;if(action==='bottom')n.y=bottom-n.h;if(action==='centerY')n.y=(top+bottom-n.h)/2;}
+ const dx=Math.max(0,-Math.min(...nodes.map(n=>n.x))),dy=Math.max(0,-Math.min(...nodes.map(n=>n.y)));for(const n of nodes){n.x+=dx;n.y+=dy;if(!Number.isFinite(n.x)||!Number.isFinite(n.y)||n.x>12000||n.y>12000)throw Error('O alinhamento ultrapassa o espaço da página. Selecione menos elementos ou reduza o espaçamento.');}
+ return {action,gap,updates:nodes.map(({ref,x,y})=>({ref,x,y}))};
+}
+function saApply(action){edSafe(()=>{
+ const plan=saPlan(project,edNow(),ED.refs,action,$('saGap').value);
+ edCommit(()=>{for(const u of plan.updates){const n=edLookup(u.ref).item;n.x=u.x;n.y=u.y;}});
+ saPaint();notify(plan.updates.length+' elementos alinhados. Use Desfazer para voltar.');
+});}
+function saPaint(){
+ const on=SELECT_ALIGN.enabled&&isModel();$('saToggle').hidden=!isModel();$('saToggle').setAttribute('aria-pressed',String(on));$('saToggle').textContent=on?'Concluir seleção':'Selecionar e alinhar';$('selectionAlignBar').hidden=!on;$('viewport').classList.toggle('select-align-active',on);
+ const count=edSelected().length;$('saCount').textContent=count+' selecionado'+(count===1?'':'s');
+ $('selectionAlignBar').querySelectorAll('[data-sa-action]').forEach(b=>b.disabled=count<(b.dataset.saAction.startsWith('dist')?3:2));$('saClear').disabled=!count;
+ $('stage').querySelectorAll('[data-edit-ref]').forEach(el=>{const chosen=ED.refs.has(el.dataset.editRef);el.setAttribute('aria-pressed',String(chosen));el.setAttribute('stroke',chosen?'#1d4ed8':'transparent');el.setAttribute('stroke-width','2');el.setAttribute('vector-effect','non-scaling-stroke');el.setAttribute('fill',chosen?'#2563eb1a':'transparent');if(chosen)el.setAttribute('stroke-dasharray','6 3');else el.removeAttribute('stroke-dasharray');});
+}
+function saCancelDrag(restore=true){const d=SELECT_ALIGN.drag;if(!d)return;SELECT_ALIGN.drag=null;if(SELECT_ALIGN.frame){cancelAnimationFrame(SELECT_ALIGN.frame);SELECT_ALIGN.frame=0;}if(restore)ED.refs=new Set(d.before);$('saMarquee').hidden=true;if($('viewport').hasPointerCapture?.(d.pointer))$('viewport').releasePointerCapture(d.pointer);saPaint();}
+function saToggle(on=!SELECT_ALIGN.enabled){
+ saCancelDrag();SELECT_ALIGN.enabled=!!on;SELECT_ALIGN.page=edNow();ED.multi=!!on;ED.linkMode=false;ED.linkStart='';
+ if(on){selected=null;ED.context={kind:'page',id:edNow()};if(typeof personDrawerClose==='function')personDrawerClose();document.body.classList.remove('org-tools-open');$('orgToolsToggle')?.setAttribute('aria-expanded','false');$('viewport').focus({preventScroll:true});}
+ renderChart();saPaint();
+}
+function saSelect(kind='all'){if(!SELECT_ALIGN.enabled)saToggle(true);ED.refs=new Set(edEntries().filter(e=>kind==='all'||e.kind===kind).map(e=>e.ref));renderChart();saPaint();}
+function saDown(event){
+ if(!SELECT_ALIGN.enabled||!isModel()||event.button!==0)return;event.preventDefault();event.stopImmediatePropagation();if(SELECT_ALIGN.drag)return;
+ const hit=event.target.closest('[data-edit-ref],[data-card-edit]');
+ if(hit){const ref=hit.dataset.editRef||'p:'+hit.dataset.cardEdit;if(ED.refs.has(ref))ED.refs.delete(ref);else ED.refs.add(ref);renderChart();saPaint();return;}
+ const rect=$('viewport').getBoundingClientRect(),point=saPoint(event.clientX,event.clientY,rect,view);
+ SELECT_ALIGN.drag={pointer:event.pointerId,start:point,last:point,screen:{x:event.clientX-rect.left,y:event.clientY-rect.top},before:new Set(ED.refs),add:event.shiftKey||event.ctrlKey||event.metaKey,moved:false,rect,transform:{...view}};
+ $('viewport').setPointerCapture(event.pointerId);
+}
+function saMove(event){
+ const d=SELECT_ALIGN.drag;if(!d||event.pointerId!==d.pointer)return;event.preventDefault();event.stopImmediatePropagation();
+ d.last=saPoint(event.clientX,event.clientY,d.rect,d.transform);d.moved=d.moved||Math.hypot((d.last.x-d.start.x)*d.transform.scale,(d.last.y-d.start.y)*d.transform.scale)>=4;
+ if(!d.moved)return;
+ const x=event.clientX-d.rect.left,y=event.clientY-d.rect.top,box=$('saMarquee');box.hidden=false;Object.assign(box.style,{left:Math.min(x,d.screen.x)+'px',top:Math.min(y,d.screen.y)+'px',width:Math.abs(x-d.screen.x)+'px',height:Math.abs(y-d.screen.y)+'px'});
+ if(!SELECT_ALIGN.frame)SELECT_ALIGN.frame=requestAnimationFrame(()=>{SELECT_ALIGN.frame=0;saDragSelection();});
+}
+function saDragSelection(){const d=SELECT_ALIGN.drag;if(!d||!d.moved)return;ED.refs=new Set([...(d.add?d.before:[]),...saRectRefs(edEntries(),d.start,d.last)]);saPaint();}
+function saUp(event){
+ const d=SELECT_ALIGN.drag;if(!d||event.pointerId!==d.pointer)return;event.preventDefault();event.stopImmediatePropagation();
+ if(event.type==='pointercancel'){saCancelDrag(true);return;}
+ d.last=saPoint(event.clientX,event.clientY,d.rect,d.transform);d.moved=d.moved||Math.hypot((d.last.x-d.start.x)*d.transform.scale,(d.last.y-d.start.y)*d.transform.scale)>=4;if(d.moved)saDragSelection();else if(!d.add)ED.refs.clear();
+ saCancelDrag(false);renderChart();saPaint();
+}
+function saNudge(dx,dy){const entries=edSelected();if(!entries.length)return;dx=Math.max(dx,-Math.min(...entries.map(e=>e.item.x)));dy=Math.max(dy,-Math.min(...entries.map(e=>e.item.y)));dx=Math.min(dx,12000-Math.max(...entries.map(e=>e.item.x)));dy=Math.min(dy,12000-Math.max(...entries.map(e=>e.item.y)));edCommit(()=>{for(const e of entries){e.item.x+=dx;e.item.y+=dy;}});saPaint();}
+
+const saButton=document.createElement('button');saButton.id='saToggle';saButton.type='button';saButton.className='soft';saButton.textContent='Selecionar e alinhar';saButton.setAttribute('aria-pressed','false');saButton.setAttribute('aria-controls','selectionAlignBar');saButton.onclick=()=>saToggle();$('orgCanvasTools').append(saButton);
+const saBar=document.createElement('section');saBar.id='selectionAlignBar';saBar.hidden=true;saBar.setAttribute('aria-label','Seleção e alinhamento');
+saBar.innerHTML='<div class="sa-selection"><strong id="saCount" role="status" aria-live="polite">0 selecionados</strong><button id="saAll" type="button">Selecionar todos</button><button id="saPeople" type="button">Só cartões</button><button id="saGroups" type="button">Só departamentos / turnos</button><button id="saClear" type="button">Limpar seleção</button></div><div class="sa-actions"><button type="button" class="primary" data-sa-action="auto">Alinhar seleção</button><button type="button" data-sa-action="row">Em linha</button><button type="button" data-sa-action="column">Em coluna</button><label for="saGap">Espaçamento <input id="saGap" type="number" min="0" max="500" value="30" step="5"> px</label><details class="sa-more"><summary>Mais alinhamentos</summary><div>'+[['left','Esquerda'],['centerX','Centro horizontal'],['right','Direita'],['top','Topo'],['centerY','Centro vertical'],['bottom','Base'],['distX','Distribuir na horizontal'],['distY','Distribuir na vertical']].map(([a,label])=>'<button type="button" data-sa-action="'+a+'">'+label+'</button>').join('')+'</div></details></div><p>Arraste no espaço vazio para selecionar ou clique nos cartões e faixas. Shift + arraste acrescenta à seleção. Esc encerra. Somente os elementos selecionados são alinhados.</p>';
+$('orgCanvasTools').after(saBar);
+const saMarquee=document.createElement('div');saMarquee.id='saMarquee';saMarquee.hidden=true;saMarquee.setAttribute('aria-hidden','true');$('viewport').append(saMarquee);if(!$('viewport').hasAttribute('tabindex'))$('viewport').tabIndex=0;
+$('saAll').onclick=()=>saSelect();$('saPeople').onclick=()=>saSelect('person');$('saGroups').onclick=()=>saSelect('group');$('saClear').onclick=()=>{ED.refs.clear();renderChart();saPaint();};
+saBar.querySelectorAll('[data-sa-action]').forEach(b=>b.onclick=()=>saApply(b.dataset.saAction));
+$('saGap').onchange=()=>{$('saGap').value=Math.max(0,Math.min(500,Number($('saGap').value)||0));};
+$('viewport').addEventListener('pointerdown',saDown,true);$('viewport').addEventListener('pointermove',saMove,true);$('viewport').addEventListener('pointerup',saUp,true);$('viewport').addEventListener('pointercancel',saUp,true);
+$('viewport').addEventListener('lostpointercapture',()=>saCancelDrag(true));
+$('viewport').addEventListener('click',e=>{if(SELECT_ALIGN.enabled){e.preventDefault();e.stopImmediatePropagation();}},true);
+document.addEventListener('keydown',e=>{
+ if(!SELECT_ALIGN.enabled||!isModel()||document.querySelector('dialog[open]')||e.target.closest('input,select,textarea,[contenteditable="true"]'))return;
+ if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();saToggle(false);return;}
+ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='a'){e.preventDefault();e.stopImmediatePropagation();saSelect();return;}
+ const hit=e.target.closest('[data-edit-ref],[data-card-edit]');if(hit&&(e.key==='Enter'||e.key===' ')){e.preventDefault();e.stopImmediatePropagation();const ref=hit.dataset.editRef||'p:'+hit.dataset.cardEdit;if(ED.refs.has(ref))ED.refs.delete(ref);else ED.refs.add(ref);saPaint();return;}
+ if(ED.refs.size&&!e.target.closest('.tabs,[role="tablist"]')&&['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();e.stopImmediatePropagation();const v=e.shiftKey?10:1;saNudge(e.key==='ArrowLeft'?-v:e.key==='ArrowRight'?v:0,e.key==='ArrowUp'?-v:e.key==='ArrowDown'?v:0);}
+},true);
+const saRenderBase=renderChart;renderChart=function(){if(SELECT_ALIGN.enabled&&SELECT_ALIGN.page!==edNow()){saCancelDrag(false);ED.refs.clear();SELECT_ALIGN.page=edNow();}saRenderBase();saPaint();};
+const saToolbarBase=edToolbar;edToolbar=function(){saToolbarBase();if($('edMultiBtn')){$('edMultiBtn').textContent='Selecionar e alinhar';$('edMultiBtn').onclick=()=>saToggle();}};
+renderChart();
 </script></body>
 </html>
